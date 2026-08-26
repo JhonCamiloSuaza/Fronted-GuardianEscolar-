@@ -6,9 +6,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../../constants/colors';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function InfoScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.topBar}>
@@ -18,25 +20,20 @@ export default function InfoScreen() {
       </View>
       <ScrollView contentContainerStyle={styles.container}>
         <Image source={require('../../assets/images/logo.png')} style={styles.logo} contentFit="contain" />
-        <Text style={styles.title}>GPS Guardian Escolar</Text>
-        <Text style={styles.description}>Seguridad familiar en tiempo real</Text>
-        <Text style={styles.paragraph}>Base inicial del frontend para seguimiento escolar, alertas y control familiar.</Text>
+        <Text style={styles.title}>{t('appName')}</Text>
+        <Text style={styles.description}>{t('infoSubtitle')}</Text>
+        <Text style={styles.paragraph}>{t('infoDescription')}</Text>
         <TouchableOpacity style={styles.primaryButton} onPress={() => router.back()}>
-          <Text style={styles.primaryButtonText}>Volver</Text>
+          <Text style={styles.primaryButtonText}>{t('back')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: COLORS.FONDO_PRINCIPAL },
-  topBar: { paddingHorizontal: 20, paddingTop: 10 },
-  backButton: { padding: 10, alignSelf: 'flex-start' },
-  container: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28, paddingBottom: 40 },
-  logo: { width: 190, height: 190, marginBottom: 20 },
-  title: { fontSize: 30, fontWeight: 'bold', color: COLORS.PRIMARIO, textAlign: 'center' },
-  description: { fontSize: 18, color: COLORS.TEXTO_SECUNDARIO, textAlign: 'center', marginTop: 8 },
-  paragraph: { fontSize: 16, color: COLORS.TEXTO_GENERAL, textAlign: 'center', lineHeight: 24, marginTop: 18 },
-  primaryButton: { marginTop: 28, backgroundColor: COLORS.PRIMARIO, paddingVertical: 14, paddingHorizontal: 34, borderRadius: 12 },
-  primaryButtonText: { color: COLORS.BLANCO, fontSize: 16, fontWeight: 'bold' },
+  safeArea: { flex: 1, backgroundColor: COLORS.FONDO_PRINCIPAL }, topBar: { paddingHorizontal: 20, paddingTop: 10 },
+  backButton: { padding: 10, alignSelf: 'flex-start' }, container: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28, paddingBottom: 40 },
+  logo: { width: 190, height: 190, marginBottom: 20 }, title: { fontSize: 30, fontWeight: 'bold', color: COLORS.PRIMARIO, textAlign: 'center' },
+  description: { fontSize: 18, color: COLORS.TEXTO_SECUNDARIO, textAlign: 'center', marginTop: 8 }, paragraph: { fontSize: 16, color: COLORS.TEXTO_GENERAL, textAlign: 'center', lineHeight: 24, marginTop: 18 },
+  primaryButton: { marginTop: 28, backgroundColor: COLORS.PRIMARIO, paddingVertical: 14, paddingHorizontal: 34, borderRadius: 12 }, primaryButtonText: { color: COLORS.BLANCO, fontSize: 16, fontWeight: 'bold' },
 });
