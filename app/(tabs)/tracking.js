@@ -232,6 +232,15 @@ export default function TrackingScreen() {
         {/* Botones de Acción */}
         <View style={styles.actionButtons}>
           <Button
+            mode="outlined"
+            style={styles.historyBtn}
+            textColor={COLORS.PRIMARIO}
+            onPress={() => router.push('/(tabs)/history')}
+            contentStyle={styles.btnContent}
+          >
+            {t('live') === 'Live' ? 'View History' : 'Ver Historial'}
+          </Button>
+          <Button
             mode="contained"
             style={styles.routeBtn}
             buttonColor={COLORS.PRIMARIO}
