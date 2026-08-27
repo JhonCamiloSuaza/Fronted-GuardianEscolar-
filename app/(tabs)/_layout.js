@@ -57,6 +57,24 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: t('tabNotifications'),
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: t('tabHistory'),
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="history" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
