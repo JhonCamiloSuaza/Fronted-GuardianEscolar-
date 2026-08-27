@@ -48,6 +48,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="zones"
+        options={{
+          title: t('tabZones'),
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="map-marker-path" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
