@@ -30,6 +30,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="student"
+        options={{
+          title: t('tabStudent'),
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account-school" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
