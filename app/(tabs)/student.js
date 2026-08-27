@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Text, Surface, Avatar, FAB, IconButton, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../../constants/colors';
 import { getStudents, addStudent, updateStudent, deleteStudent, getInitials, addNotification, addHistory } from '../../utils/studentStorage';
@@ -25,6 +25,7 @@ export default function StudentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fotoCargada, setFotoCargada] = useState(null); // guardará la URI de la imagen
   const [codigoGenerado, setCodigoGenerado] = useState(null);
+  const router = useRouter();
   const { t } = useLanguage();
 
   // Recarga cada vez que la pantalla recibe foco
@@ -219,6 +220,18 @@ export default function StudentScreen() {
         <Text style={styles.contactName}>{item.contacto_nombre || t('studNotAssigned')}</Text>
         <Text style={styles.contactPhone}>{item.contacto_telefono || t('studNotAssigned')}</Text>
       </View>
+
+      <Button
+        mode="contained"
+        buttonColor={
+          item.status === 'WARNING' ? COLORS.ALERTA :
+          item.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
+        }
+        style={styles.verMapaBtn}
+        onPress={() => router.push({ pathname: '/(tabs)/tracking', params: { id: item.id, name: item.nombre } })}
+      >
+        {t('studViewMap')}
+      </Button>
 
       {/* Acciones flotantes */}
       <View style={styles.cardActionsFloating}>
