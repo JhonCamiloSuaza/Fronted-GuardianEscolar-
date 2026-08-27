@@ -39,6 +39,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="tracking"
+        options={{
+          title: t('tabTracking'),
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="map-search-outline" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
