@@ -229,6 +229,19 @@ export default function TrackingScreen() {
           </View>
         </Surface>
 
+        {/* Botones de Acción */}
+        <View style={styles.actionButtons}>
+          <Button
+            mode="contained"
+            style={styles.routeBtn}
+            buttonColor={COLORS.PRIMARIO}
+            onPress={() => router.push('/(tabs)/zones')}
+            contentStyle={styles.btnContent}
+          >
+            {t('live') === 'Live' ? 'Configure Route' : 'Configurar Ruta'}
+          </Button>
+        </View>
+
       </ScrollView>
     </View>
   );
