@@ -1,37 +1,57 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { StyleSheet, TouchableOpacity, useWindowDimensions, View, Animated, Platform, Modal, Pressable } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Modal, Platform, Pressable, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/colors';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_LANGUAGES } from '../../translations';
-import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
+
+// ════════════════════════════════════════════════════════════════
+// BREAKPOINTS RESPONSIVE
+// ════════════════════════════════════════════════════════════════
+
+const BREAKPOINTS = {
+  mobile: 0,      // 0px - 480px
+  tablet: 481,    // 481px - 768px
+  desktop: 769,   // 769px - 1024px
+  wide: 1025,     // 1025px+
+};
+
+const getScreenType = (width) => {
+  if (width < BREAKPOINTS.tablet) return 'mobile';
+  if (width < BREAKPOINTS.desktop) return 'tablet';
+  if (width < BREAKPOINTS.wide) return 'desktop';
+  return 'wide';
+};
 
 function CustomHeader() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isWeb = width > 768;
+  const screenType = getScreenType(width);
+  const isWeb = screenType === 'desktop' || screenType === 'wide';
+  
   const router = useRouter();
   const pathname = usePathname();
   const { t, lang, setLanguage } = useLanguage();
+  const { theme, isDark, toggleTheme } = useTheme();
+  
   const [isOnline, setIsOnline] = useState(true);
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [selectedLang, setSelectedLang] = useState(lang);
-
-  // Animación para el punto LIVE
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // ─── Verificar conexión ───
   useEffect(() => {
     const checkConnection = async () => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
-        const url = Platform.OS === 'web'
-          ? 'https://captive.apple.com/generate_204'
+        const url = Platform.OS === 'web' 
+          ? 'https://captive.apple.com/generate_204' 
           : 'http://connectivitycheck.gstatic.com/generate_204';
-        await fetch(url, {
+        await fetch(url, { 
           method: 'GET',
           signal: controller.signal,
           ...(Platform.OS === 'web' ? { mode: 'no-cors' } : {})
@@ -57,6 +77,7 @@ function CustomHeader() {
     return () => clearInterval(interval);
   }, []);
 
+  // ─── Animación LIVE ───
   useEffect(() => {
     if (isOnline) {
       Animated.loop(
@@ -71,7 +92,6 @@ function CustomHeader() {
     }
   }, [isOnline]);
 
-  // Sync selectedLang with global lang
   useEffect(() => { setSelectedLang(lang); }, [lang]);
 
   const navItems = [
@@ -90,11 +110,11 @@ function CustomHeader() {
   };
 
   return (
-    <View style={{ backgroundColor: COLORS.PRIMARIO, paddingTop: insets.top }}>
+    <View style={[styles.headerContainer, { backgroundColor: theme.colors.primary, paddingTop: insets.top }]}>
       <View style={styles.header}>
         {/* Marca + Badge LIVE */}
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Text style={styles.headerBrand}>{t('appName')}</Text>
+          <Text style={[styles.headerBrand, { color: theme.colors.textOnPrimary }]}>{t('appName')}</Text>
           <View style={[styles.connectionBadge, !isOnline && styles.connectionBadgeOffline]}>
             <Animated.View style={[styles.statusDot, { opacity: pulseAnim }, !isOnline && styles.statusDotOffline]} />
             <Text style={styles.statusText}>{isOnline ? t('live') : t('offline')}</Text>
@@ -108,7 +128,7 @@ function CustomHeader() {
               const isActive = pathname === item.route || (item.route === '/(tabs)' && pathname === '/');
               return (
                 <TouchableOpacity key={item.route} onPress={() => router.push(item.route)}>
-                  <Text style={[styles.navLink, isActive && styles.navLinkActive]}>
+                  <Text style={[styles.navLink, isActive && styles.navLinkActive, { color: theme.colors.textOnPrimary }]}>
                     {t(item.labelKey)}
                   </Text>
                 </TouchableOpacity>
@@ -117,11 +137,29 @@ function CustomHeader() {
           </View>
         )}
 
-        {/* Globo de idioma */}
-        <TouchableOpacity onPress={() => setLangModalVisible(true)} style={styles.globeBtn}>
-          <MaterialCommunityIcons name="web" size={22} color="#fff" />
-          <Text style={styles.langCode}>{lang.toUpperCase()}</Text>
-        </TouchableOpacity>
+        {/* Botones de control (Theme + Idioma) */}
+        <View style={styles.controlsContainer}>
+          {/* Toggle Dark Mode */}
+          <TouchableOpacity 
+            style={[styles.iconBtn, { borderColor: theme.colors.textOnPrimary + '40' }]}
+            onPress={toggleTheme}
+          >
+            <MaterialCommunityIcons 
+              name={isDark ? 'white-balance-sunny' : 'moon-waning-crescent'} 
+              size={18} 
+              color={theme.colors.textOnPrimary}
+            />
+          </TouchableOpacity>
+
+          {/* Selector de Idioma */}
+          <TouchableOpacity 
+            onPress={() => setLangModalVisible(true)} 
+            style={[styles.globeBtn, { borderColor: theme.colors.textOnPrimary + '40' }]}
+          >
+            <MaterialCommunityIcons name="web" size={16} color={theme.colors.textOnPrimary} />
+            <Text style={[styles.langCode, { color: theme.colors.textOnPrimary }]}>{lang.toUpperCase()}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Modal de idioma */}
@@ -131,47 +169,43 @@ function CustomHeader() {
         animationType="fade"
         onRequestClose={() => setLangModalVisible(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setLangModalVisible(false)}>
-          <Pressable style={styles.langModal} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.langModalTitle}>{t('langTitle')}</Text>
-            <Text style={styles.langModalSub}>{t('langSubtitle')}</Text>
+        <Pressable style={[styles.modalOverlay, { backgroundColor: theme.colors.overlay }]} onPress={() => setLangModalVisible(false)}>
+          <Pressable style={[styles.langModal, { backgroundColor: theme.colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[styles.langModalTitle, { color: theme.colors.primary }]}>{t('langTitle')}</Text>
+            <Text style={[styles.langModalSub, { color: theme.colors.textSecondary }]}>{t('langSubtitle')}</Text>
 
             {SUPPORTED_LANGUAGES.map((l) => (
               <TouchableOpacity
                 key={l.code}
                 style={[
                   styles.langOption,
-                  selectedLang === l.code && styles.langOptionSelected,
-                  !l.available && styles.langOptionDisabled,
+                  { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceSecondary },
+                  selectedLang === l.code && { borderColor: theme.colors.accent, backgroundColor: theme.colors.accent + '15' },
                 ]}
-                onPress={() => l.available && setSelectedLang(l.code)}
-                disabled={!l.available}
+                onPress={() => setSelectedLang(l.code)}
               >
                 <Text style={styles.langFlag}>{l.flag}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={[
                     styles.langLabel,
-                    selectedLang === l.code && styles.langLabelSelected,
-                    !l.available && styles.langLabelDisabled,
+                    { color: theme.colors.text },
+                    selectedLang === l.code && { color: theme.colors.primary, fontWeight: 'bold' },
                   ]}>
                     {l.label}
                   </Text>
-                  {!l.available && (
-                    <Text style={styles.comingSoonLabel}>{t('langComingSoon')}</Text>
-                  )}
                 </View>
                 {selectedLang === l.code && (
-                  <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.ACENTO} />
+                  <MaterialCommunityIcons name="check-circle" size={20} color={theme.colors.accent} />
                 )}
               </TouchableOpacity>
             ))}
 
-            <TouchableOpacity style={styles.applyBtn} onPress={handleApplyLanguage}>
-              <Text style={styles.applyBtnText}>{t('langSave')}</Text>
+            <TouchableOpacity style={[styles.applyBtn, { backgroundColor: theme.colors.primary }]} onPress={handleApplyLanguage}>
+              <Text style={[styles.applyBtnText, { color: theme.colors.textOnPrimary }]}>{t('langSave')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setLangModalVisible(false)} style={{ marginTop: 10, alignItems: 'center' }}>
-              <Text style={{ color: COLORS.TEXTO_SECUNDARIO, fontSize: 13 }}>✕ Cerrar</Text>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>✕ {t('close')}</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -181,24 +215,32 @@ function CustomHeader() {
 }
 
 function TabLayoutInner() {
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const screenType = getScreenType(width);
+  const showTabBar = screenType !== 'wide' && screenType !== 'desktop';
   const { t } = useLanguage();
+  const { theme } = useTheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: COLORS.PRIMARIO,
-        tabBarInactiveTintColor: COLORS.TEXTO_SECUNDARIO,
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textSecondary,
         headerShown: true,
         header: () => <CustomHeader />,
-        tabBarStyle: {
-          borderTopWidth: 0,
-          elevation: 10,
-          backgroundColor: COLORS.BLANCO,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+        // ─── RESPONSIVE TABBAR ───
+        tabBarStyle: showTabBar ? {
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          elevation: 8,
+          backgroundColor: theme.colors.surface,
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
           paddingTop: 10,
-        }
+        } : {
+          display: 'none', // ← Oculta en desktop/wide
+        },
       }}>
       <Tabs.Screen
         name="index"
@@ -272,104 +314,116 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  headerContainer: {
+    borderBottomWidth: 1,
+  },
   header: {
-    backgroundColor: COLORS.PRIMARIO,
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    gap: 12,
   },
   headerBrand: {
-    color: COLORS.BLANCO,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0,
   },
   navLinks: {
     flexDirection: 'row',
-    gap: 25,
+    gap: 28,
   },
   navLink: {
-    color: COLORS.BLANCO,
-    fontSize: 14,
+    fontSize: 13,
     opacity: 0.7,
+    fontWeight: '500',
   },
   navLinkActive: {
     opacity: 1,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   connectionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff20',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 12,
-    marginLeft: 12,
+    marginLeft: 10,
     borderWidth: 1,
-    borderColor: '#ffffff40',
+    borderColor: 'rgba(255,255,255,0.28)',
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#4ADE80',
-    marginRight: 6,
+    marginRight: 5,
   },
   statusText: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   connectionBadgeOffline: {
-    backgroundColor: '#EF444420',
-    borderColor: '#EF444440',
+    backgroundColor: 'rgba(239,68,68,0.16)',
+    borderColor: 'rgba(239,68,68,0.28)',
   },
   statusDotOffline: {
     backgroundColor: '#EF4444',
   },
+  controlsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
   globeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 12,
-    backgroundColor: '#ffffff20',
-    borderRadius: 18,
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#ffffff40',
   },
   langCode: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 10,
-    marginLeft: 5,
+    fontWeight: '700',
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   langModal: {
-    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 24,
     width: 320,
     maxWidth: '90%',
-    elevation: 10,
+    elevation: 8,
   },
   langModalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.PRIMARIO,
     marginBottom: 4,
   },
   langModalSub: {
     fontSize: 12,
-    color: COLORS.TEXTO_SECUNDARIO,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   langOption: {
     flexDirection: 'row',
@@ -379,46 +433,33 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-  },
-  langOptionSelected: {
-    borderColor: COLORS.ACENTO,
-    backgroundColor: COLORS.ACENTO + '10',
   },
   langOptionDisabled: {
     opacity: 0.5,
   },
   langFlag: {
-    fontSize: 24,
+    fontSize: 22,
     marginRight: 12,
   },
   langLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
-  },
-  langLabelSelected: {
-    color: COLORS.PRIMARIO,
   },
   langLabelDisabled: {
     color: '#9CA3AF',
   },
   comingSoonLabel: {
     fontSize: 10,
-    color: '#9CA3AF',
     marginTop: 1,
   },
   applyBtn: {
-    backgroundColor: COLORS.PRIMARIO,
     borderRadius: 12,
-    paddingVertical: 13,
+    paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
   },
   applyBtnText: {
-    color: '#fff',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 14,
   },
 });

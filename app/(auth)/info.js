@@ -17,16 +17,16 @@ export default function InfoScreen() {
   const isCompactHeight = height < 760;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea}>  
       <View style={styles.topBar}>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={styles.backButton}
           onPress={() => router.back()}
         >
           <MaterialCommunityIcons name="arrow-left" size={28} color={COLORS.PRIMARIO} />
         </TouchableOpacity>
       </View>
-      <ScrollView
+      <ScrollView 
         contentContainerStyle={[styles.container, isMobile && styles.containerMobile]}
         showsVerticalScrollIndicator={false}
       >

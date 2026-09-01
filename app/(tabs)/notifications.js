@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  useWindowDimensions,
   Text as RNText,
   Dimensions,
   Alert,
@@ -18,6 +17,7 @@ import { getStudents, getNotifications, deleteNotification, deleteHistory } from
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const isWeb = Dimensions.get('window').width > 768;
 
@@ -42,6 +42,15 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState(NOTIFICATIONS);
   const [refreshing, setRefreshing] = useState(false);
   const { t } = useLanguage();
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const themed = {
+    screen: { backgroundColor: colors.background },
+    surface: { backgroundColor: colors.surface, borderColor: colors.border },
+    surfaceSecondary: { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+    text: { color: colors.text },
+    textSecondary: { color: colors.textSecondary },
+  };
 
   const FILTERS_KEYS = [
     { key: 'all',  label: () => t('notifAll'),      type: null },
@@ -51,10 +60,10 @@ export default function NotificationsScreen() {
   ];
 
   const CHIP_COLORS = {
-    all:          { active: COLORS.PRIMARIO, inactive: COLORS.GRIS_BORDE },
-    Exitosas:     { active: COLORS.ACENTO,   inactive: COLORS.GRIS_BORDE },
-    Advertencias: { active: COLORS.ALERTA,   inactive: COLORS.GRIS_BORDE },
-    Informativas: { active: COLORS.PRIMARIO, inactive: COLORS.GRIS_BORDE },
+    all:          { active: colors.primary, inactive: colors.surfaceSecondary },
+    Exitosas:     { active: colors.success, inactive: colors.surfaceSecondary },
+    Advertencias: { active: colors.error,   inactive: colors.surfaceSecondary },
+    Informativas: { active: colors.primary, inactive: colors.surfaceSecondary },
   };
 
   useFocusEffect(
@@ -68,10 +77,10 @@ export default function NotificationsScreen() {
     setTimeout(async () => {
       const [studentData, storedNotifs] = await Promise.all([getStudents(), getNotifications()]);
       setStudents(studentData);
-
+      
       // Combinar notificaciones estáticas + almacenadas + dinámicas de registro
       let combined = [...storedNotifs, ...NOTIFICATIONS];
-
+      
       studentData.forEach((student) => {
         if (!combined.find(n => n.id === `new-${student.id}`)) {
           combined.push({
@@ -112,8 +121,8 @@ export default function NotificationsScreen() {
       t('delete') + '?',
       [
         { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('delete'),
+        { 
+          text: t('delete'), 
           style: 'destructive',
           onPress: async () => {
             if (item.id.toString().startsWith('new-') || NOTIFICATIONS.find(n => n.id === item.id)) {
@@ -141,7 +150,7 @@ export default function NotificationsScreen() {
     : notifications.filter(n => n.type === filter);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, themed.screen]}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, isWeb && styles.scrollContentWeb]}
         showsVerticalScrollIndicator={false}
@@ -152,20 +161,20 @@ export default function NotificationsScreen() {
         {/* Título */}
         <View style={styles.titleRow}>
           <View>
-            <RNText style={styles.pageTitle}>{t('notifTitle')}</RNText>
-            <RNText style={styles.pageSubtitle}>{notifications.length} {t('notifSubtitle')}</RNText>
+            <RNText style={[styles.pageTitle, themed.text]}>{t('notifTitle')}</RNText>
+            <RNText style={[styles.pageSubtitle, themed.textSecondary]}>{notifications.length} {t('notifSubtitle')}</RNText>
           </View>
-          <TouchableOpacity
-            style={styles.markAllBtn}
+          <TouchableOpacity 
+            style={[styles.markAllBtn, themed.surfaceSecondary]}
             onPress={() => Alert.alert(t('notifTitle'), t('notifMarked'))}
           >
-            <RNText style={styles.markAllText}>{t('notifMarkAll')}</RNText>
+            <RNText style={[styles.markAllText, themed.textSecondary]}>{t('notifMarkAll')}</RNText>
           </TouchableOpacity>
         </View>
 
         {/* Filtros */}
-        <View style={styles.filterCard}>
-          <RNText style={styles.filterLabel}>{t('notifFilter')}</RNText>
+        <View style={[styles.filterCard, themed.surface]}>
+          <RNText style={[styles.filterLabel, themed.textSecondary]}>{t('notifFilter')}</RNText>
           <View style={styles.chipsRow}>
             {FILTERS_KEYS.map((f) => {
               const isActive = filter === f.key;
@@ -175,11 +184,11 @@ export default function NotificationsScreen() {
                   onPress={() => setFilter(f.key)}
                   style={[
                     styles.chip,
-                    { backgroundColor: isActive ? CHIP_COLORS[f.key].active : CHIP_COLORS[f.key].inactive }
+                    { backgroundColor: isActive ? CHIP_COLORS[f.key].active : CHIP_COLORS[f.key].inactive, borderColor: isActive ? CHIP_COLORS[f.key].active : colors.border }
                   ]}
                   activeOpacity={0.8}
                 >
-                  <RNText style={[styles.chipText, isActive && styles.chipTextActive]}>
+                  <RNText style={[styles.chipText, themed.text, isActive && styles.chipTextActive]}>
                     {f.label()} ({filterCounts[f.key]})
                   </RNText>
                 </TouchableOpacity>
@@ -191,17 +200,17 @@ export default function NotificationsScreen() {
         {/* Notificaciones */}
         {filteredNotifications.length > 0 ? (
           filteredNotifications.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.notifCard}
+            <TouchableOpacity 
+              key={item.id} 
+              style={[styles.notifCard, themed.surface]}
               onPress={() => Alert.alert(t('notifDetail'), item.message)}
             >
               <View style={styles.notifRow}>
                 <View style={[styles.colorCircle, { backgroundColor: item.color }]} />
                 <View style={styles.notifInfo}>
-                  <RNText style={styles.notifName}>{item.name}</RNText>
-                  <RNText style={styles.notifMessage}>
-                    {t('live') === 'Live'
+                  <RNText style={[styles.notifName, themed.text]}>{item.name}</RNText>
+                  <RNText style={[styles.notifMessage, themed.text]}>
+                    {t('live') === 'Live' 
                       ? item.message
                           .replace('llegó a zona segura', 'arrived at safe zone')
                           .replace('está en camino a casa', 'is on his way home')
@@ -215,24 +224,24 @@ export default function NotificationsScreen() {
                           .replace('(Seguro)', '(Safe)')
                       : item.message}
                   </RNText>
-                  <RNText style={styles.notifTime}>
-                    {t('live') === 'Live'
+                  <RNText style={[styles.notifTime, themed.textSecondary]}>
+                    {t('live') === 'Live' 
                       ? item.time.replace('Hace ', '').replace(' Minutos', ' min ago').replace('Reciente', 'Just now').replace('Ahora', 'Just now')
                       : item.time}
                   </RNText>
                 </View>
-                <TouchableOpacity
-                  style={{ padding: 8, justifyContent: 'center' }}
+                <TouchableOpacity 
+                  style={{ padding: 8, justifyContent: 'center' }} 
                   onPress={() => confirmDeleteNotif(item)}
                 >
-                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={COLORS.ALERTA} />
+                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.error} />
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
           ))
         ) : (
           <View style={styles.emptyState}>
-            <RNText style={styles.emptyText}>{t('notifEmpty')}</RNText>
+            <RNText style={[styles.emptyText, themed.textSecondary]}>{t('notifEmpty')}</RNText>
           </View>
         )}
       </ScrollView>
