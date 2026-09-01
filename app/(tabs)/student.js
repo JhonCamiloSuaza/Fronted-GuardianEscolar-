@@ -1,18 +1,28 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, StyleSheet, FlatList, TouchableOpacity,
-  Modal, TextInput, Alert, Dimensions, ScrollView, KeyboardAvoidingView, Platform, RefreshControl
-} from 'react-native';
-import { Text, Surface, Avatar, FAB, IconButton, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  Alert, Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform, RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { Avatar, Button, FAB, Surface, Text } from 'react-native-paper';
 import { COLORS } from '../../constants/colors';
-import { getStudents, addStudent, updateStudent, deleteStudent, getInitials, addNotification, addHistory } from '../../utils/studentStorage';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { addHistory, addNotification, addStudent, deleteStudent, getStudents, updateStudent } from '../../utils/studentStorage';
 
 const { width } = Dimensions.get('window');
 const isWeb = width > 768;
+const isTablet = width > 600 && width <= 1024;
 
 const EMPTY_FORM = { nombre: '', grado: '', colegio: '', edad: '', contacto_nombre: '', contacto_telefono: '', status: 'SAFE' };
 
@@ -23,10 +33,21 @@ export default function StudentScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [fotoCargada, setFotoCargada] = useState(null); // guardará la URI de la imagen
+  const [fotoCargada, setFotoCargada] = useState(null); // guardara la URI de la imagen
   const [codigoGenerado, setCodigoGenerado] = useState(null);
   const router = useRouter();
   const { t } = useLanguage();
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const themed = {
+    screen: { backgroundColor: colors.background },
+    surface: { backgroundColor: colors.surface, borderColor: colors.border },
+    surfaceSecondary: { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+    text: { color: colors.text },
+    textSecondary: { color: colors.textSecondary },
+    input: { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text },
+    overlay: { backgroundColor: colors.overlay },
+  };
 
   // Recarga cada vez que la pantalla recibe foco
   useFocusEffect(
@@ -85,7 +106,7 @@ export default function StudentScreen() {
       t('studDelete'),
       `${t('studDeleteConfirm')} ${student.nombre}? ${t('studDeleteWarning')}`,
       [
-        { text: t('cancel'), style: 'cancel' },
+        { text: t('cncel'), style: 'cncel' },
         {
           text: t('delete'),
           style: 'destructive',
@@ -124,6 +145,23 @@ export default function StudentScreen() {
       Alert.alert(t('studRequiredField'), t('studRequiredName'));
       return;
     }
+    if (!form.edad.trim() || Number(form.edad) < 1 || Number(form.edad) > 100) {
+      Alert.alert(t('studRequiredField'), 'La edad debe estar entre 1 y 100.');
+      return;
+    }
+    if (!form.grado.trim()) {
+      Alert.alert(t('studRequiredField'), 'El grado es obligatorio.');
+      return;
+    }
+    if (!form.contacto_nombre.trim()) {
+      Alert.alert(t('studRequiredField'), 'El contacto de emergencia es obligatorio.');
+      return;
+    }
+    const phoneDigits = form.contacto_telefono.replace(/\D/g, '');
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      Alert.alert(t('studRequiredField'), 'Ingresa un teléfono válido, solo números.');
+      return;
+    }
     setLoading(true);
     try {
       let updated;
@@ -134,20 +172,20 @@ export default function StudentScreen() {
         updated = await addStudent(dataToSave);
       }
       setStudents(updated);
-
+      
       // Registrar en Notificaciones e Historial si el estado es relevante
       if (form.status) {
-        const msg = form.status === 'WARNING' ? 'salió de la zona segura (Alerta)' :
-                    form.status === 'INFO' ? 'está en camino' :
-                    'llegó a zona segura';
-
+        const msg = form.status === 'WARNING' ? 'salio de la zona segura (Alerta)' : 
+                    form.status === 'INFO' ? 'está en camino' : 
+                    'llego a zona segura';
+        
         await addNotification({
           studentId: editingStudent ? editingStudent.id : updated[updated.length - 1].id,
-          type: form.status === 'WARNING' ? 'Advertencias' :
+          type: form.status === 'WARNING' ? 'Advertencias' : 
                 form.status === 'INFO' ? 'Informativas' : 'Exitosas',
           name: form.nombre,
           message: `${form.nombre} ${msg}`,
-          color: form.status === 'WARNING' ? COLORS.ALERTA :
+          color: form.status === 'WARNING' ? COLORS.ALERTA : 
                  form.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
         });
 
@@ -158,11 +196,11 @@ export default function StudentScreen() {
           horaFin: '--',
           duracion: '--',
           distancia: '--',
-          estado: form.status === 'WARNING' ? 'Con Incidente' :
+          estado: form.status === 'WARNING' ? 'Con Incidente' : 
                   form.status === 'INFO' ? 'En Proceso' : 'Completado',
           alerta: form.status === 'WARNING',
-          ruta: 'Actualización Manual',
-          studentColor: form.status === 'WARNING' ? COLORS.ALERTA :
+          ruta: 'Actualización manual',
+          studentColor: form.status === 'WARNING' ? COLORS.ALERTA : 
                         form.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
         });
       }
@@ -174,14 +212,14 @@ export default function StudentScreen() {
   }
 
   const StudentCard = ({ item }) => (
-    <Surface style={[styles.childCard, { flex: isWeb ? 1 : undefined }]} elevation={2}>
+    <Surface style={[styles.childCard, themed.surface, { flex: isWeb ? 1 : undefined }]} elevation={2}>
       <View style={styles.childAvatarWrap}>
         {item.foto && item.foto.trim().length > 0 && item.foto !== 'null' && item.foto !== 'undefined' ? (
-          <Avatar.Image
-            size={80}
-            source={{ uri: item.foto }}
+          <Avatar.Image 
+            size={80} 
+            source={{ uri: item.foto }} 
             style={{
-              backgroundColor: item.status === 'WARNING' ? COLORS.ALERTA :
+              backgroundColor: item.status === 'WARNING' ? COLORS.ALERTA : 
                                item.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
             }}
           />
@@ -190,41 +228,41 @@ export default function StudentScreen() {
             size={80}
             label={item.nombre ? item.nombre.substring(0, 2).toUpperCase() : '??'}
             style={{
-              backgroundColor: item.status === 'WARNING' ? COLORS.ALERTA :
+              backgroundColor: item.status === 'WARNING' ? COLORS.ALERTA : 
                                item.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
             }}
             color={COLORS.BLANCO}
           />
         )}
       </View>
-      <Text style={styles.childName}>{item.nombre}</Text>
-      <Text style={styles.childSub}>
+      <Text style={[styles.childName, themed.text]}>{item.nombre}</Text>
+      <Text style={[styles.childSub, themed.textSecondary]}>
         {item.edad ? `${item.edad} ${t('studYears')}` : ''} {item.grado ? `- ${t('live') === 'Live' ? item.grado.replace('ro Grado', 'rd Grade').replace('to Grado', 'th Grade').replace('do Grado', 'nd Grade').replace('er Grado', 'st Grade').replace('Grado', 'Grade').replace('1ro', '1st Grade').replace('2do', '2nd Grade').replace('3ro', '3rd Grade').replace('4to', '4th Grade').replace('5to', '5th Grade').replace('do', 'nd').replace('ro', 'rd').replace('to', 'th') : item.grado}` : ''}
       </Text>
-
+      
       <View style={styles.badgeWrap}>
         <View style={[
-          styles.badgeActive,
+          styles.badgeActive, 
           item.status === 'WARNING' && { backgroundColor: COLORS.ALERTA },
           item.status === 'INFO' && { backgroundColor: COLORS.PRIMARIO }
         ]}>
           <Text style={styles.badgeText}>
-            {item.status === 'WARNING' ? t('studAlert') :
+            {item.status === 'WARNING' ? t('studAlert') : 
              item.status === 'INFO' ? t('studOnRoute') : t('studSafeZone')}
           </Text>
         </View>
       </View>
 
-      <View style={styles.contactBox}>
-        <Text style={styles.contactLabel}>{t('studEmergencyContact')}</Text>
-        <Text style={styles.contactName}>{item.contacto_nombre || t('studNotAssigned')}</Text>
-        <Text style={styles.contactPhone}>{item.contacto_telefono || t('studNotAssigned')}</Text>
+      <View style={[styles.contactBox, themed.surfaceSecondary]}>
+        <Text style={[styles.contactLabel, themed.text]}>{t('studEmergencyContact')}</Text>
+        <Text style={[styles.contactName, themed.textSecondary]}>{item.contacto_nombre || t('studNotAssigned')}</Text>
+        <Text style={[styles.contactPhone, themed.textSecondary]}>{item.contacto_telefono || t('studNotAssigned')}</Text>
       </View>
 
-      <Button
-        mode="contained"
+      <Button 
+        mode="contained" 
         buttonColor={
-          item.status === 'WARNING' ? COLORS.ALERTA :
+          item.status === 'WARNING' ? COLORS.ALERTA : 
           item.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
         }
         style={styles.verMapaBtn}
@@ -235,23 +273,23 @@ export default function StudentScreen() {
 
       {/* Acciones flotantes */}
       <View style={styles.cardActionsFloating}>
-        <TouchableOpacity style={styles.actionBtnIcon} onPress={() => openEdit(item)}>
-          <MaterialCommunityIcons name="pencil" size={16} color={COLORS.TEXTO_SECUNDARIO} />
+        <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => openEdit(item)} accessibilityLabel={t('edit')}>
+          <MaterialCommunityIcons name="pencil" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnIcon} onPress={() => confirmDelete(item)}>
-          <MaterialCommunityIcons name="trash-can" size={16} color={COLORS.ALERTA} />
+        <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => confirmDelete(item)} accessibilityLabel={t('delete')}>
+          <MaterialCommunityIcons name="trash-can" size={16} color={colors.error} />
         </TouchableOpacity>
       </View>
     </Surface>
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, themed.screen]}>
       {students.length === 0 ? (
         <View style={styles.emptyState}>
-          <MaterialCommunityIcons name="account-school-outline" size={90} color={COLORS.GRIS_BORDE} />
-          <Text style={styles.emptyTitle}>{t('studEmpty')}</Text>
-          <Text style={styles.emptySub}>{t('studEmptySub')}</Text>
+          <MaterialCommunityIcons name="account-school-outline" size={90} color={colors.border} />
+          <Text style={[styles.emptyTitle, themed.text]}>{t('studEmpty')}</Text>
+          <Text style={[styles.emptySub, themed.textSecondary]}>{t('studEmptySub')}</Text>
         </View>
       ) : (
         <FlatList
@@ -266,8 +304,8 @@ export default function StudentScreen() {
           }
           ListHeaderComponent={
             <View style={styles.pageHeader}>
-              <Text style={styles.pageTitle}>{t('studTitle')}</Text>
-              <Text style={styles.pageSubtitle}>{t('studSubtitle')}</Text>
+              <Text style={[styles.pageTitle, themed.text]}>{t('studTitle')}</Text>
+              <Text style={[styles.pageSubtitle, themed.textSecondary]}>{t('studSubtitle')}</Text>
             </View>
           }
           renderItem={({ item }) => <StudentCard item={item} />}
@@ -278,7 +316,7 @@ export default function StudentScreen() {
       <FAB
         icon="plus"
         style={styles.fabNew}
-        color={COLORS.BLANCO}
+        color={colors.textOnAccent}
         onPress={openAdd}
       />
 
@@ -289,63 +327,63 @@ export default function StudentScreen() {
         transparent
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, themed.overlay]}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalKAV}
           >
-            <Surface style={styles.modalSheetMockup} elevation={5}>
+            <Surface style={[styles.modalSheetMockup, themed.surface]} elevation={5}>
               {/* Header */}
-              <View style={styles.modalHeaderMockup}>
-                <Text style={styles.modalTitleMockup}>
+              <View style={[styles.modalHeaderMockup, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitleMockup, themed.text]}>
                   {editingStudent ? t('studEditTitle') : t('studAddTitle')}
                 </Text>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mockupScroll}>
-                <Text style={styles.mockupLabel}>Nombre completo del Estudiante *</Text>
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Nombre completo del estudiante *</Text>
                 <TextInput
-                  style={styles.mockupInput}
+                  style={[styles.mockupInput, themed.input]}
                   value={form.nombre}
                   onChangeText={v => setForm(f => ({ ...f, nombre: v }))}
                 />
 
                 <View style={styles.mockupRow}>
-                  <View style={{ flex: 1, marginRight: 10 }}>
-                    <Text style={styles.mockupLabel}>Edad</Text>
+                  <View style={styles.mockupHalfFieldLeft}>
+                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Edad</Text>
                     <TextInput
-                      style={styles.mockupInput}
+                      style={[styles.mockupInput, themed.input]}
                       value={form.edad}
-                      onChangeText={v => setForm(f => ({ ...f, edad: v }))}
+                      onChangeText={v => setForm(f => ({ ...f, edad: v.replace(/\D/g, '').slice(0, 3) }))}
                       keyboardType="numeric"
                     />
                   </View>
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.mockupLabel}>Grado</Text>
+                  <View style={styles.mockupHalfFieldRight}>
+                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Grado</Text>
                     <TextInput
-                      style={styles.mockupInput}
+                      style={[styles.mockupInput, themed.input]}
                       value={form.grado}
                       onChangeText={v => setForm(f => ({ ...f, grado: v }))}
                     />
                   </View>
                 </View>
 
-                <Text style={styles.mockupLabel}>Contacto de Emergencia</Text>
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Contacto de Emergencia</Text>
                 <TextInput
-                  style={styles.mockupInput}
+                  style={[styles.mockupInput, themed.input]}
                   value={form.contacto_nombre}
                   onChangeText={v => setForm(f => ({ ...f, contacto_nombre: v }))}
                 />
 
-                <Text style={styles.mockupLabel}>Telefono de Emergencia</Text>
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Teléfono de emergencia</Text>
                 <TextInput
-                  style={styles.mockupInput}
+                  style={[styles.mockupInput, themed.input]}
                   value={form.contacto_telefono}
-                  onChangeText={v => setForm(f => ({ ...f, contacto_telefono: v }))}
+                  onChangeText={v => setForm(f => ({ ...f, contacto_telefono: v.replace(/\D/g, '').slice(0, 15) }))}
                   keyboardType="phone-pad"
                 />
 
-                <Text style={styles.mockupLabel}>Estado de Simulación</Text>
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Estado de Simulación</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
                   {[
                     { id: 'SAFE', label: 'Seguro', color: COLORS.ACENTO },
@@ -359,16 +397,16 @@ export default function StudentScreen() {
                         flex: 1,
                         paddingVertical: 8,
                         borderRadius: 8,
-                        backgroundColor: form.status === status.id ? status.color : '#F3F4F6',
+                        backgroundColor: form.status === status.id ? status.color : colors.surfaceSecondary,
                         borderWidth: 1,
-                        borderColor: form.status === status.id ? status.color : '#E5E7EB',
+                        borderColor: form.status === status.id ? status.color : colors.border,
                         alignItems: 'center'
                       }}
                     >
-                      <Text style={{
-                        fontSize: 12,
-                        fontWeight: '600',
-                        color: form.status === status.id ? '#FFF' : '#6B7280'
+                      <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '600', 
+                        color: form.status === status.id ? COLORS.BLANCO : colors.textSecondary 
                       }}>
                         {status.label}
                       </Text>
@@ -376,75 +414,74 @@ export default function StudentScreen() {
                   ))}
                 </View>
 
-                <Text style={styles.mockupLabel}>Subir Foto del Estudiante (Opcional)</Text>
-
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Subir foto del estudiante (Opcional)</Text>
+                
                 {fotoCargada && (
                   <View style={{ alignItems: 'center', marginBottom: 10, position: 'relative', alignSelf: 'center' }}>
                     <Avatar.Image size={80} source={{ uri: fotoCargada }} />
-                    <TouchableOpacity
+                    <TouchableOpacity 
                       style={{
                         position: 'absolute',
                         top: -5,
                         right: -5,
-                        backgroundColor: '#EF4444',
+                        backgroundColor: colors.error,
                         borderRadius: 15,
                         width: 26,
                         height: 26,
                         justifyContent: 'center',
                         alignItems: 'center',
                         borderWidth: 2,
-                        borderColor: '#FFF'
+                        borderColor: colors.surface
                       }}
                       onPress={() => setFotoCargada(null)}
                     >
-                      <MaterialCommunityIcons name="close" size={16} color="#FFF" />
+                      <MaterialCommunityIcons name="close" size={16} color={COLORS.BLANCO} />
                     </TouchableOpacity>
                   </View>
                 )}
 
-                <TouchableOpacity
-                  style={[styles.mockupUploadBtn, fotoCargada && { borderColor: COLORS.ACENTO, backgroundColor: '#F0FAF0' }]}
+                <TouchableOpacity 
+                  style={[styles.mockupUploadBtn, { borderColor: colors.border }, fotoCargada && { borderColor: colors.accent, backgroundColor: colors.accentLight }]} 
                   onPress={pickImage}
                 >
-                  <Text style={[styles.mockupUploadText, fotoCargada && { color: COLORS.ACENTO, fontWeight: 'bold' }]}>
+                  <Text style={[styles.mockupUploadText, themed.textSecondary, fotoCargada && { color: colors.accent, fontWeight: 'bold' }]}>
                     {fotoCargada ? 'Cambiar Foto' : 'Cargar Foto'}
                   </Text>
                 </TouchableOpacity>
 
-                <View style={styles.mockupInfoBox}>
-                  <Text style={styles.mockupInfoTitle}>Vincular Dispositivo del Estudiante</Text>
-                  <Text style={styles.mockupInfoDesc}>
+                <View style={[styles.mockupInfoBox, { borderColor: colors.primary }]}>
+                  <Text style={[styles.mockupInfoTitle, { color: colors.primary }]}>Vincular Dispositivo del Estudiante</Text>
+                  <Text style={[styles.mockupInfoDesc, themed.textSecondary]}>
                     El estudiante no necesita cuenta. Solo instala la app en su celular y vincula su dispositivo usando el código QR o token.
                   </Text>
-
+                  
                   {codigoGenerado ? (
-                    <View style={styles.codigoBox}>
-                      <Text style={styles.codigoText}>Código: {codigoGenerado}</Text>
-                      <Text style={styles.codigoHint}>Ingresa este código en el celular del estudiante</Text>
+                    <View style={[styles.codigoBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                      <Text style={[styles.codigoText, { color: colors.primary }]}>Código: {codigoGenerado}</Text>
+                      <Text style={[styles.codigoHint, themed.textSecondary]}>Ingresa este código en el celular del estudiante</Text>
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.mockupGenerateBtn}
+                    <TouchableOpacity 
+                      style={[styles.mockupGenerateBtn, { backgroundColor: colors.primary }]} 
                       onPress={() => {
                         const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
                         setCodigoGenerado(randomCode);
                         Alert.alert('Código Generado', `El código de vinculación es: ${randomCode}`);
                       }}
                     >
-                      <Text style={styles.mockupGenerateText}>Generar Codigo de Vinculacion</Text>
+                      <Text style={styles.mockupGenerateText}>Generar código de vinculación</Text>
                     </TouchableOpacity>
                   )}
                 </View>
-
-                <View style={styles.mockupActions}>
-                  <TouchableOpacity style={styles.mockupCancelBtn} onPress={() => setModalVisible(false)}>
-                    <Text style={styles.mockupCancelText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.mockupSaveBtn} onPress={handleSave}>
-                    <Text style={styles.mockupSaveText}>Guardar</Text>
-                  </TouchableOpacity>
-                </View>
               </ScrollView>
+              <View style={[styles.mockupActions, { borderTopColor: colors.border }]}>
+                <TouchableOpacity style={[styles.mockupCancelBtn, { borderColor: colors.border }]} onPress={() => setModalVisible(false)}>
+                  <Text style={[styles.mockupCancelText, themed.text]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.mockupSaveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={loading}>
+                  <Text style={styles.mockupSaveText}>{loading ? t('loading') : 'Guardar'}</Text>
+                </TouchableOpacity>
+              </View>
             </Surface>
           </KeyboardAvoidingView>
         </View>
@@ -481,11 +518,11 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
   },
-  listWeb: {
-    maxWidth: 800,
-    alignSelf: 'center',
-    width: '100%',
-    paddingTop: 20
+  listWeb: { 
+    maxWidth: 800, 
+    alignSelf: 'center', 
+    width: '100%', 
+    paddingTop: 20 
   },
   listContainer: {
     padding: 24,
@@ -514,13 +551,18 @@ const styles = StyleSheet.create({
   /* ── Nueva Tarjeta Mis Hijos ── */
   childCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     padding: 20,
     marginBottom: 20,
     position: 'relative',
     maxWidth: 350,
+    shadowColor: COLORS.NEGRO,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
   childAvatarWrap: {
     alignItems: 'center',
@@ -578,19 +620,26 @@ const styles = StyleSheet.create({
   },
   verMapaBtn: {
     borderRadius: 8,
-    paddingVertical: 4,
+    minHeight: 42,
+    justifyContent: 'center',
   },
   cardActionsFloating: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 14,
+    right: 14,
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
+    alignItems: 'center',
   },
   actionBtnIcon: {
-    padding: 4,
+    width: 32,
+    height: 32,
     backgroundColor: '#F3F4F6',
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.GRIS_BORDE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   /* ── Estado vacío ── */
   emptyState: {
@@ -627,10 +676,15 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: isWeb ? 24 : 10,
+    paddingVertical: 18,
   },
   modalKAV: {
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
   },
   modalSheet: {
     backgroundColor: COLORS.FONDO_TARJETA,
@@ -713,16 +767,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
   },
-
+  
   /* ── Estilos del Mockup ── */
   modalSheetMockup: {
     backgroundColor: COLORS.BLANCO,
-    borderRadius: 8,
-    paddingTop: 16,
-    paddingBottom: 24,
-    maxWidth: 550,
+    borderRadius: 10,
+    paddingTop: 14,
+    paddingBottom: 0,
+    maxWidth: 780,
     alignSelf: 'center',
-    width: '90%',
+    width: isWeb ? (isTablet ? '85%' : '82%') : '95%',
+    maxHeight: '86%',
+    overflow: 'hidden',
   },
   modalHeaderMockup: {
     alignItems: 'center',
@@ -738,6 +794,7 @@ const styles = StyleSheet.create({
   },
   mockupScroll: {
     paddingHorizontal: 24,
+    paddingBottom: 16,
   },
   mockupLabel: {
     fontSize: 12,
@@ -748,21 +805,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D1D5DB',
     borderRadius: 6,
-    height: 38,
+    minHeight: 40,
     paddingHorizontal: 10,
     marginBottom: 16,
     backgroundColor: '#FFF',
     fontSize: 13,
   },
   mockupRow: {
-    flexDirection: 'row',
+    flexDirection: isWeb ? 'row' : 'column',
     justifyContent: 'space-between',
+  },
+  mockupHalfFieldLeft: {
+    flex: 1,
+    marginRight: isWeb ? 10 : 0,
+  },
+  mockupHalfFieldRight: {
+    flex: 1,
+    marginLeft: isWeb ? 10 : 0,
   },
   mockupUploadBtn: {
     borderWidth: 1,
     borderColor: '#6B7280',
     borderRadius: 6,
-    paddingVertical: 8,
+    minHeight: 42,
+    paddingVertical: 9,
     paddingHorizontal: 16,
     alignSelf: 'flex-start',
     marginBottom: 20,
@@ -777,6 +843,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 16,
     marginBottom: 24,
+    minHeight: 138,
   },
   mockupInfoTitle: {
     fontSize: 13,
@@ -792,7 +859,8 @@ const styles = StyleSheet.create({
   mockupGenerateBtn: {
     backgroundColor: '#1D4ED8',
     borderRadius: 6,
-    paddingVertical: 10,
+    minHeight: 42,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   mockupGenerateText: {
@@ -807,12 +875,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#C7D2FE',
+    width: '100%',
   },
   codigoText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#4338CA',
     letterSpacing: 2,
+    textAlign: 'center',
   },
   codigoHint: {
     fontSize: 11,
@@ -822,15 +892,20 @@ const styles = StyleSheet.create({
   mockupActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 18,
+    borderTopWidth: 1,
   },
   mockupCancelBtn: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#374151',
     borderRadius: 6,
-    paddingVertical: 10,
+    minHeight: 44,
     alignItems: 'center',
-    marginRight: 8,
+    justifyContent: 'center',
   },
   mockupCancelText: {
     color: '#111827',
@@ -840,9 +915,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1E3A8A',
     borderRadius: 6,
-    paddingVertical: 10,
+    minHeight: 44,
     alignItems: 'center',
-    marginLeft: 8,
+    justifyContent: 'center',
   },
   mockupSaveText: {
     color: '#FFF',
