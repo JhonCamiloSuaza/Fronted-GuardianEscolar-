@@ -1,88 +1,82 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Dimensions, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/colors';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-
-const isWeb = Dimensions.get('window').width > 768;
+import { useTheme } from '../../contexts/ThemeContext';
+import { authService } from '../../services/auth.service';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const { t } = useLanguage();
-  const [method, setMethod] = useState('email');
+  const { theme } = useTheme();
+  const colors = theme.colors;
   const [contact, setContact] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleResetPassword = async () => {
+    setErrorMsg('');
     if (!contact.trim()) {
+      setErrorMsg(t('invalidInput'));
       return;
     }
-    setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      setIsSubmitting(true);
+      await authService.requestPasswordRecovery(contact);
+      router.push('/(auth)/verify-recovery-code');
+    } catch (error) {
+      setErrorMsg(error.message || t('someError'));
+    } finally {
       setIsSubmitting(false);
-      router.push('/(auth)/verify-code');
-    }, 1000);
+    }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.topBar}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={28} color={COLORS.PRIMARIO} />
+          <MaterialCommunityIcons name="arrow-left" size={28} color={colors.primary} />
         </TouchableOpacity>
       </View>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.wrapper}>
-            <Image
-              source={require('../../assets/images/logo.png')}
-              style={styles.headerLogo}
-              contentFit="contain"
-            />
-            <Text style={styles.headerTitle}>{t('appName')}</Text>
+            <Image source={require('../../assets/images/logo.png')} style={styles.headerLogo} contentFit="contain" />
+            <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('appName')}</Text>
 
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{t('authForgotPass')}</Text>
-              <Text style={styles.cardSubtitle}>{t('authForgotSubtitle')}</Text>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>{t('authForgotTitle')}</Text>
+              <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>{t('authRecoveryHelp')}</Text>
 
-              <View style={styles.switchRow}>
-                <TouchableOpacity
-                  style={[styles.switchBtn, method === 'phone' && styles.switchBtnActive]}
-                  onPress={() => { setMethod('phone'); setContact(''); }}
-                >
-                  <Text style={[styles.switchText, method === 'phone' && styles.switchTextActive]}>{t('profilePhone')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.switchBtn, method === 'email' && styles.switchBtnActive]}
-                  onPress={() => { setMethod('email'); setContact(''); }}
-                >
-                  <Text style={[styles.switchText, method === 'email' && styles.switchTextActive]}>{t('authEmail')}</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={[styles.label, { color: colors.text }]}>{t('authRecoveryContact')}</Text>
 
               <TextInput
                 mode="outlined"
                 value={contact}
-                onChangeText={setContact}
-                keyboardType={method === 'phone' ? 'phone-pad' : 'email-address'}
+                onChangeText={(value) => {
+                  setContact(value);
+                  setErrorMsg('');
+                }}
+                keyboardType="email-address"
                 autoCapitalize="none"
-                placeholder={method === 'phone' ? 'XXXXXXXXX' : 'correo@ejemplo.com'}
-                outlineColor="#D9D9D9"
-                activeOutlineColor={COLORS.PRIMARIO}
-                style={styles.input}
-                textColor={COLORS.NEGRO}
+                placeholder="correo@ejemplo.com o +57 300 123 4567"
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={[styles.input, { backgroundColor: colors.surfaceSecondary }]}
+                textColor={colors.text}
                 theme={{ roundness: 6 }}
+                left={<TextInput.Icon icon="account-search-outline" color={colors.textSecondary} />}
               />
+
+              {errorMsg ? (
+                <View style={[styles.errorBox, { backgroundColor: colors.errorLight, borderColor: colors.error }]}>
+                  <Text style={[styles.errorText, { color: colors.error }]}>{errorMsg}</Text>
+                </View>
+              ) : null}
 
               <Button
                 mode="contained"
@@ -90,16 +84,12 @@ export default function ForgotPasswordScreen() {
                 loading={isSubmitting}
                 style={styles.actionButton}
                 contentStyle={styles.buttonContent}
-                buttonColor={COLORS.PRIMARIO}
+                buttonColor={colors.primary}
+                textColor={colors.textOnPrimary}
                 disabled={isSubmitting}
               >
                 {t('authSendCode')}
               </Button>
-
-              <View style={styles.noteBox}>
-                <Text style={styles.noteText}>Nota: Recibirás un código de 6 dígitos</Text>
-                <Text style={styles.noteText}>para verificar tu identidad.</Text>
-              </View>
             </View>
           </View>
         </ScrollView>
@@ -109,7 +99,8 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: COLORS.FONDO_PRINCIPAL },
+  flex: { flex: 1 },
+  safeArea: { flex: 1 },
   topBar: {
     width: '100%',
     flexDirection: 'row',
@@ -118,84 +109,19 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     zIndex: 10,
   },
-  backButton: {
-    padding: 8,
-  },
+  backButton: { padding: 8 },
   scrollContent: { flexGrow: 1, justifyContent: 'center' },
-  wrapper: {
-    width: '100%',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    alignSelf: 'center',
-  },
+  wrapper: { width: '100%', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 24 },
   headerLogo: { width: 120, height: 120, marginBottom: 6 },
-  headerTitle: {
-    fontSize: isWeb ? 32 : 22,
-    fontWeight: 'bold',
-    color: COLORS.PRIMARIO,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  card: {
-    backgroundColor: COLORS.BLANCO,
-    width: '100%',
-    maxWidth: 430,
-    padding: 14,
-    borderRadius: 3,
-    elevation: 2,
-    shadowColor: COLORS.NEGRO,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    borderWidth: 1,
-    borderColor: COLORS.GRIS_BORDE,
-  },
-  backInline: { marginBottom: 8 },
-  backInlineText: {
-    color: COLORS.PRIMARIO,
-    fontSize: 13,
-    textDecorationLine: 'underline',
-  },
-  cardTitle: { fontSize: isWeb ? 26 : 18, fontWeight: '500', color: COLORS.NEGRO, textAlign: 'center', marginBottom: 4 },
-  cardSubtitle: { fontSize: 12, color: COLORS.TEXTO_GENERAL, textAlign: 'center', marginBottom: 10, lineHeight: 18 },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
-    marginBottom: 10,
-  },
-  switchBtn: {
-    flex: 1,
-    height: 34,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: COLORS.GRIS_BORDE,
-    backgroundColor: COLORS.BLANCO,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  switchBtnActive: {
-    backgroundColor: COLORS.PRIMARIO,
-    borderColor: COLORS.PRIMARIO,
-  },
-  switchText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: COLORS.NEGRO,
-  },
-  switchTextActive: {
-    color: COLORS.BLANCO,
-  },
-  input: { backgroundColor: COLORS.FONDO_INPUT, height: 44, marginBottom: 10 },
-  actionButton: { borderRadius: 4, marginBottom: 10 },
-  buttonContent: { height: 38 },
-  noteBox: {
-    backgroundColor: COLORS.PRIMARIO_CLARO,
-    borderRadius: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-  },
-  noteText: { fontSize: 10, color: COLORS.PRIMARIO, lineHeight: 13, textAlign: 'center' },
+  headerTitle: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
+  card: { width: '100%', maxWidth: 430, padding: 18, borderRadius: 8, elevation: 2, borderWidth: 1 },
+  cardTitle: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 6 },
+  cardSubtitle: { fontSize: 12, textAlign: 'center', marginBottom: 14, lineHeight: 18 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  input: { height: 44, marginBottom: 10 },
+  actionButton: { borderRadius: 8, marginTop: 10 },
+  buttonContent: { height: 42 },
+  errorBox: { borderRadius: 8, padding: 10, marginBottom: 10, borderWidth: 1 },
+  errorText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
 });
+
