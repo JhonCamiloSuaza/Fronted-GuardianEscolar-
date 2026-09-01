@@ -1,0 +1,33 @@
+export const palette = {
+  blue900: '#133A66',
+  blue800: '#1A4F8A',
+  blue700: '#2A6CB5',
+  blue100: '#E8EFF7',
+  green700: '#5C9E37',
+  green500: '#7BC74D',
+  green300: '#9EE361',
+  green100: '#F1F9EE',
+  red600: '#E53935',
+  red400: '#FF6B6B',
+  red100: '#FFEBEE',
+  amber500: '#F59E0B',
+  amber300: '#FFB84D',
+  slate950: '#0F1419',
+  slate900: '#1A1F26',
+  slate800: '#25293C',
+  slate700: '#35394A',
+  slate500: '#6B7280',
+  slate400: '#9CA3AF',
+  slate300: '#A8B0C0',
+  slate100: '#F4F5F7',
+  slate50: '#F8F9FA',
+  white: '#FFFFFF',
+  ink: '#1A1A1A',
+};
+
+export const rgba = {
+  scrimLight: 'rgba(0, 0, 0, 0.5)',
+  scrimDark: 'rgba(0, 0, 0, 0.72)',
+  pressedLight: 'rgba(0, 0, 0, 0.08)',
+  pressedDark: 'rgba(255, 255, 255, 0.12)',
+};

@@ -9,25 +9,25 @@ const HISTORY_KEY = '@guardian_historial';
 const DEFAULT_STUDENTS = [
   {
     id: '1',
-    nombre: 'Maria Pérez',
+    nombre: 'María Pérez',
     grado: '3ro Grado',
-    colegio: 'Colegio San Jose',
+    colegio: 'Colegio San José',
     edad: '9',
     label: 'MP',
     color: COLORS.PRIMARIO,
     zones: [
       { id: 'z1', name: 'Casa', type: 'Casa', address: 'Calle 45 #12-10', radius: '100 Metros', color: COLORS.PRIMARIO },
-      { id: 'z2', name: 'Colegio San Jose', type: 'Escuela', address: 'Carrera 50 #15-30', radius: '150 Metros', color: COLORS.PRIMARIO },
+      { id: 'z2', name: 'Colegio San José', type: 'Escuela', address: 'Carrera 50 #15-30', radius: '150 Metros', color: COLORS.PRIMARIO },
     ],
     routes: [
-      { id: 'r1', name: 'Casa - Colegio', start: 'Casa', end: 'Colegio San Jose', isActive: true }
+      { id: 'r1', name: 'Casa - Colegio', start: 'Casa', end: 'Colegio San José', isActive: true }
     ]
   },
   {
     id: '2',
     nombre: 'Carlos Pérez',
     grado: '5to Grado',
-    colegio: 'Colegio San Jose',
+    colegio: 'Colegio San José',
     edad: '11',
     label: 'CP',
     color: COLORS.PRIMARIO,
@@ -54,8 +54,12 @@ export async function getStudents() {
     const data = await AsyncStorage.getItem(STORAGE_KEY);
     if (data !== null) {
       const parsed = JSON.parse(data);
-      // Asegurar que todos tengan propiedad zones y routes
-      return parsed.map(s => ({ ...s, zones: s.zones || [], routes: s.routes || [] }));
+      // Asegurar compatibilidad con datos guardados antes de normalizar las claves.
+      return parsed.map(s => ({
+        ...s,
+        zones: s.zones || s.zonesh || [],
+        routes: s.routes || s.routesh || [],
+      }));
     }
     // Primera vez: guardar y retornar defaults
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_STUDENTS));
@@ -102,7 +106,7 @@ export async function deleteStudent(id) {
 
   if (studentToDelete) {
     const sName = studentToDelete.nombre.trim().toLowerCase();
-
+    
     // Sincronizar borrado con Notificaciones
     const notifications = await getNotifications();
     const updatedNotifs = notifications.filter(n => {
@@ -130,7 +134,7 @@ export async function deleteStudent(id) {
 export async function addZone(studentId, zoneData) {
   const students = await getStudents();
   const newZone = { ...zoneData, id: generateId() };
-  const updated = students.map(s =>
+  const updated = students.map(s => 
     s.id === studentId ? { ...s, zones: [...(s.zones || []), newZone] } : s
   );
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -167,7 +171,7 @@ export async function deleteZone(studentId, zoneId) {
 export async function addRoute(studentId, routeData) {
   const students = await getStudents();
   const newRoute = { ...routeData, id: Date.now().toString(), isActive: true };
-  const updated = students.map(s =>
+  const updated = students.map(s => 
     s.id === studentId ? { ...s, routes: [...(s.routes || []), newRoute] } : s
   );
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -208,10 +212,10 @@ export async function getNotifications() {
 
 export async function addNotification(notif) {
   const current = await getNotifications();
-  const newNotif = {
-    id: Date.now().toString(),
-    time: 'Ahora',
-    ...notif
+  const newNotif = { 
+    id: Date.now().toString(), 
+    time: 'Ahora', 
+    ...notif 
   };
   const updated = [newNotif, ...current].slice(0, 50); // Guardar últimas 50
   await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
@@ -234,10 +238,10 @@ export async function getHistory() {
 
 export async function addHistory(entry) {
   const current = await getHistory();
-  const newEntry = {
-    id: Date.now().toString(),
+  const newEntry = { 
+    id: Date.now().toString(), 
     fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' }),
-    ...entry
+    ...entry 
   };
   const updated = [newEntry, ...current].slice(0, 50);
   await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));

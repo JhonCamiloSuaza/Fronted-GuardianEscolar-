@@ -15,7 +15,7 @@ export default function StudentDashboardScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-
+  
   // Datos del estudiante
   const studentName = params.nombre || 'Estudiante Demo';
   const studentAge = params.edad || 'No especificada';
@@ -39,7 +39,7 @@ export default function StudentDashboardScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
-
+          
           {/* Card 1: Estado de Rastreo */}
           <Surface style={[styles.card, styles.statusCard]} elevation={2}>
             <View style={styles.statusIconWrap}>
@@ -109,9 +109,9 @@ export default function StudentDashboardScreen() {
               </View>
             </View>
 
-            <Button
-              mode="contained"
-              buttonColor="#E11D48"
+            <Button 
+              mode="contained" 
+              buttonColor="#E11D48" 
               textColor="#FFF"
               style={styles.emergencyBtn}
               onPress={() => {}}

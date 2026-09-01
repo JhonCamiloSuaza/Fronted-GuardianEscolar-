@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
-import { Avatar, Text, Surface, IconButton, Button, Divider } from 'react-native-paper';
+import { Avatar, Text, Surface, IconButton, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { COLORS } from '../../constants/colors';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SafeMap from '../../components/SafeMap';
 import { getStudents, getInitials } from '../../utils/studentStorage';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const isWeb = width > 768;
@@ -21,15 +21,23 @@ const INITIAL_REGION = {
 };
 
 export default function TrackingScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams();
-
+  
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [location, setLocation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const themed = {
+    screen: { backgroundColor: colors.background },
+    surface: { backgroundColor: colors.surface, borderColor: colors.border },
+    surfaceSecondary: { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+    text: { color: colors.text },
+    textSecondary: { color: colors.textSecondary },
+  };
 
   // Cargar estudiantes reales
   useFocusEffect(
@@ -51,7 +59,6 @@ export default function TrackingScreen() {
   );
 
   const updateStudentSim = (student) => {
-    if (!student) return;
     const offset = (student.nombre.length % 10) * 0.002;
     setLocation({
       latitude: 4.5709 + offset,
@@ -84,32 +91,32 @@ export default function TrackingScreen() {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, themed.screen]}>
       <ScrollView contentContainerStyle={[styles.scrollContent, isWeb && styles.scrollContentWeb]}>
-
+        
         {/* Cabecera del Estudiante */}
-        <Surface style={styles.headerCard} elevation={1}>
+        <Surface style={[styles.headerCard, themed.surface]} elevation={1}>
           <View style={styles.headerProfile}>
-            <Avatar.Text
-              size={40}
-              label={selectedStudent ? getInitials(selectedStudent.nombre) : '??'}
-              backgroundColor={COLORS.PRIMARIO}
-              color={COLORS.BLANCO}
+            <Avatar.Text 
+              size={40} 
+              label={selectedStudent ? getInitials(selectedStudent.nombre) : '??'} 
+              backgroundColor={colors.primary} 
+              color={colors.textOnPrimary} 
             />
             <View style={styles.headerTextCol}>
-              <Text style={styles.studentName}>{selectedStudent?.nombre || t('trackSelectStudent')}</Text>
-              <Text style={styles.studentStatus}>{t('trackOnline')}</Text>
+              <Text style={[styles.studentName, themed.text]}>{selectedStudent?.nombre || t('trackSelectStudent')}</Text>
+              <Text style={[styles.studentStatus, themed.textSecondary]}>{t('trackOnline')}</Text>
             </View>
           </View>
-          <IconButton
-            icon="refresh"
-            size={20}
-            style={styles.refreshBtn}
-            iconColor={COLORS.TEXTO_SECUNDARIO}
+          <IconButton 
+            icon="refresh" 
+            size={20} 
+            style={[styles.refreshBtn, themed.surfaceSecondary]} 
+            iconColor={colors.textSecondary} 
             onPress={() => {
               setIsLoading(true);
               setTimeout(() => setIsLoading(false), 1000);
-            }}
+            }} 
           />
         </Surface>
 
@@ -117,21 +124,22 @@ export default function TrackingScreen() {
         <View style={styles.selectorContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorScroll}>
             {students.map(student => (
-              <TouchableOpacity
-                key={student.id}
+              <TouchableOpacity 
+                key={student.id} 
                 onPress={() => handleSelectStudent(student)}
                 style={[
-                  styles.selectorItem,
-                  selectedStudent?.id === student.id && { borderColor: COLORS.PRIMARIO, borderWidth: 2 }
+                  styles.selectorItem, 
+                  themed.surface,
+                  selectedStudent?.id === student.id && { borderColor: colors.primary, borderWidth: 2 }
                 ]}
               >
-                <Avatar.Text
-                  size={42}
-                  label={getInitials(student.nombre)}
-                  backgroundColor={COLORS.PRIMARIO}
-                  color={COLORS.BLANCO}
+                <Avatar.Text 
+                  size={42} 
+                  label={getInitials(student.nombre)} 
+                  backgroundColor={colors.primary} 
+                  color={colors.textOnPrimary} 
                 />
-                <Text style={[styles.selectorLabel, selectedStudent?.id === student.id && { color: COLORS.PRIMARIO, fontWeight: 'bold' }]} numberOfLines={1}>
+                <Text style={[styles.selectorLabel, themed.textSecondary, selectedStudent?.id === student.id && { color: colors.primary, fontWeight: 'bold' }]} numberOfLines={1}>
                   {student.nombre.split(' ')[0]}
                 </Text>
               </TouchableOpacity>
@@ -140,80 +148,79 @@ export default function TrackingScreen() {
         </View>
 
         {/* Tarjeta del Mapa */}
-        <Surface style={styles.mapCard} elevation={1}>
+        <Surface style={[styles.mapCard, themed.surface]} elevation={1}>
           {isLoading ? (
             <View style={styles.loadingCenter}>
-              <ActivityIndicator size="large" color={COLORS.PRIMARIO} />
+              <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : (
-            <SafeMap
-              currentLocation={location}
-              initialRegion={INITIAL_REGION}
+            <SafeMap 
+              currentLocation={location} 
+              initialRegion={INITIAL_REGION} 
               style={styles.map}
             />
           )}
-          <IconButton
-            icon="crosshairs-gps"
-            mode="contained"
-            containerColor={COLORS.BLANCO}
-            iconColor={COLORS.PRIMARIO}
-            style={styles.mapFab}
-            onPress={() => selectedStudent && updateStudentSim(selectedStudent)}
-            disabled={!selectedStudent}
+          <IconButton 
+            icon="crosshairs-gps" 
+            mode="contained" 
+            containerColor={colors.surface}
+            iconColor={colors.primary}
+            style={styles.mapFab} 
+            onPress={() => updateStudentSim(selectedStudent)} 
           />
-
+          
           {/* Leyenda del Mapa */}
-          <View style={styles.mapLegend}>
+          <View style={[styles.mapLegend, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
             <View style={styles.legendRow}>
               <View style={[styles.legendDot, { backgroundColor: COLORS.PRIMARIO }]} />
-              <Text style={styles.legendText}>{t('trackCurrentLocation')}</Text>
+              <Text style={[styles.legendText, themed.text]}>{t('trackCurrentLocation')}</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={[styles.legendLine, { backgroundColor: COLORS.PRIMARIO }]} />
-              <Text style={styles.legendText}>{t('trackJourney')}</Text>
+              <Text style={[styles.legendText, themed.text]}>{t('trackJourney')}</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={[styles.legendLine, { backgroundColor: COLORS.TEXTO_SECUNDARIO, borderStyle: 'dashed' }]} />
-              <Text style={styles.legendText}>{t('trackAssignedRoute')}</Text>
+              <Text style={[styles.legendText, themed.text]}>{t('trackAssignedRoute')}</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={[styles.legendDot, { backgroundColor: COLORS.ACENTO }]} />
-              <Text style={styles.legendText}>{t('trackSafeZone')}</Text>
+              <Text style={[styles.legendText, themed.text]}>{t('trackSafeZone')}</Text>
             </View>
           </View>
         </Surface>
 
         {/* Última Actualización */}
-        <Surface style={styles.infoCard} elevation={1}>
+        <Surface style={[styles.infoCard, themed.surface]} elevation={1}>
           <View style={styles.rowBetween}>
             <View>
-              <Text style={styles.cardTitle}>{t('trackLastUpdate')}</Text>
-              <Text style={styles.cardSubtitle}>{t('trackMinutesAgo')}</Text>
+              <Text style={[styles.cardTitle, themed.text]}>{t('trackLastUpdate')}</Text>
+              <Text style={[styles.cardSubtitle, themed.textSecondary]}>{t('trackMinutesAgo')}</Text>
             </View>
-            <View style={styles.activeBadge}>
-              <Text style={styles.activeBadgeText}>{t('trackActive')}</Text>
+            <View style={[styles.activeBadge, { backgroundColor: colors.accentLight }]}>
+              <Text style={[styles.activeBadgeText, { color: colors.success }]}>{t('trackActive')}</Text>
             </View>
           </View>
         </Surface>
 
         {/* Estado Actual */}
-        <Surface style={styles.infoCard} elevation={1}>
-          <Text style={styles.cardTitle}>{t('trackCurrentStatus')}</Text>
-
-          <View style={styles.statusRowWrapper}>
+        <Surface style={[styles.infoCard, themed.surface]} elevation={1}>
+          <Text style={[styles.cardTitle, themed.text]}>{t('trackCurrentStatus')}</Text>
+          
+          <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="target" size={16} color={COLORS.ALERTA} style={styles.statusIcon} />
-            <Text style={styles.statusText}>{t('trackOnRoute')}</Text>
+            <Text style={[styles.statusText, themed.text]}>{t('trackOnRoute')}</Text>
           </View>
-
-          <View style={styles.statusRowWrapper}>
+          
+          <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="lightning-bolt" size={16} color={COLORS.ADVERTENCIA} style={styles.statusIcon} />
-            <Text style={styles.statusText}>{t('trackSpeed')} {selectedStudent ? (selectedStudent.nombre.length * 4) : 15} km/h</Text>
+            <Text style={[styles.statusText, themed.text]}>{t('trackSpeed')} {selectedStudent ? (selectedStudent.nombre.length * 4) : 15} km/h</Text>
           </View>
-
-          <View style={styles.statusRowWrapper}>
+          
+          <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="map-marker" size={16} color={COLORS.PRIMARIO} style={styles.statusIcon} />
-            <Text style={styles.statusText}>
-              {selectedStudent?.nombre === 'Maria Pérez' ? 'Calle 45 #23-10, Neiva' :
+            <Text style={[styles.statusText, themed.text]}>
+              {selectedStudent?.nombre === 'Maria Pérez' ? 'Calle 45 #23-10, Neiva' : 
                selectedStudent?.nombre === 'Carlos Pérez' ? 'Carrera 7 #33-90, Bogotá' :
                selectedStudent ? `Av. Principal #10-${selectedStudent.nombre.length}, Soacha` : 'Calle 45 #23-10, Neiva'}
             </Text>
@@ -221,29 +228,29 @@ export default function TrackingScreen() {
         </Surface>
 
         {/* Alerta Reciente */}
-        <Surface style={styles.infoCard} elevation={1}>
-          <Text style={styles.cardTitle}>{t('trackRecentAlert')}</Text>
-          <View style={styles.alertBox}>
-            <Text style={styles.alertBoxTitle}>{t('live') === 'Live' ? 'Arrived at Safe Zone' : 'Llegó a Zona Segura'}</Text>
-            <Text style={styles.alertBoxSub}>{t('trackMinutesAgo')}</Text>
+        <Surface style={[styles.infoCard, themed.surface]} elevation={1}>
+          <Text style={[styles.cardTitle, themed.text]}>{t('trackRecentAlert')}</Text>
+          <View style={[styles.alertBox, { backgroundColor: colors.accentLight }]}>
+            <Text style={[styles.alertBoxTitle, { color: colors.success }]}>{t('live') === 'Live' ? 'Arrived at Safe Zone' : 'Llegó a Zona Segura'}</Text>
+            <Text style={[styles.alertBoxSub, { color: colors.success }]}>{t('trackMinutesAgo')}</Text>
           </View>
         </Surface>
 
         {/* Botones de Acción */}
         <View style={styles.actionButtons}>
-          <Button
-            mode="outlined"
-            style={styles.historyBtn}
-            textColor={COLORS.PRIMARIO}
+          <Button 
+            mode="outlined" 
+            style={[styles.historyBtn, { borderColor: colors.primary, backgroundColor: colors.surfaceSecondary }]} 
+            textColor={colors.primary}
             onPress={() => router.push('/(tabs)/history')}
             contentStyle={styles.btnContent}
           >
             {t('live') === 'Live' ? 'View History' : 'Ver Historial'}
           </Button>
-          <Button
-            mode="contained"
-            style={styles.routeBtn}
-            buttonColor={COLORS.PRIMARIO}
+          <Button 
+            mode="contained" 
+            style={styles.routeBtn} 
+            buttonColor={colors.primary}
             onPress={() => router.push('/(tabs)/zones')}
             contentStyle={styles.btnContent}
           >
@@ -260,7 +267,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.FONDO_PRINCIPAL },
   scrollContent: { padding: 16, paddingBottom: 40 },
   scrollContentWeb: { maxWidth: 1000, alignSelf: 'center', width: '100%', paddingTop: 20 },
-
+  
   headerCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.BLANCO, borderRadius: 8, padding: 12, marginBottom: 16 },
   headerProfile: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerTextCol: { justifyContent: 'center' },
@@ -276,20 +283,20 @@ const styles = StyleSheet.create({
   mapCard: { height: 300, backgroundColor: COLORS.BLANCO, borderRadius: 8, overflow: 'hidden', marginBottom: 16, position: 'relative' },
   map: { flex: 1 },
   loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
+  
   mapLegend: { position: 'absolute', bottom: 10, left: 10, backgroundColor: 'rgba(255,255,255,0.9)', padding: 8, borderRadius: 8 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLine: { width: 12, height: 2 },
   legendText: { fontSize: 10, color: COLORS.NEGRO },
-
+  
   mapFab: { position: 'absolute', top: 10, right: 10, elevation: 4 },
 
   infoCard: { backgroundColor: COLORS.BLANCO, borderRadius: 8, padding: 16, marginBottom: 16 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.NEGRO, marginBottom: 4 },
   cardSubtitle: { fontSize: 12, color: COLORS.TEXTO_SECUNDARIO },
-
+  
   activeBadge: { backgroundColor: COLORS.ACENTO_CLARO, paddingHorizontal: 16, paddingVertical: 4, borderRadius: 12 },
   activeBadgeText: { color: COLORS.ACENTO_OSCURO, fontSize: 12, fontWeight: 'bold' },
 
