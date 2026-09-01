@@ -1,710 +1,380 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, Modal } from 'react-native';
-import { Avatar, Text, Button, Divider, Surface, Switch, TextInput, IconButton } from 'react-native-paper';
-import { useAuth } from '../../contexts/AuthContext';
-import { COLORS } from '../../constants/colors';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { authService } from '../../services/auth.service';
+import React, { useState } from 'react';
+import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Avatar, Button, Divider, IconButton, Surface, Switch, Text, TextInput } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { authService } from '../../services/auth.service';
 
-const { width } = Dimensions.get('window');
-const isWeb = width > 768;
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
+const hasUpperCase = (v) => /[A-Z]/.test(v);
+const hasLowerCase = (v) => /[a-z]/.test(v);
+const hasNumber = (v) => /[0-9]/.test(v);
+const hasSpecial = (v) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
+const hasMinLength = (v) => v.length >= 8;
 
 export default function ProfileScreen() {
   const { user, logout, updateUserInSession } = useAuth();
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { t, lang, setLanguage } = useLanguage();
+  const { t } = useLanguage();
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const isWide = width >= 769;
 
-  // 'main' o 'language'
-  const [viewMode, setViewMode] = useState('main');
-
-  // Estados
-  const [notifLlegada, setNotifLlegada] = useState(true);
-  const [notifSalida, setNotifSalida] = useState(true);
-  const [notifDesvio, setNotifDesvio] = useState(true);
   const [notifBateria, setNotifBateria] = useState(true);
-
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifSMS, setNotifSMS] = useState(false);
-
-  const [langEs, setLangEs] = useState(true);
-  const [langPt, setLangPt] = useState(false);
-  const [langFr, setLangFr] = useState(false);
-  const [langEn, setLangEn] = useState(false);
-
-  const handleLanguageChange = (code) => {
-    setLanguage(code);
-    setLangEs(code === 'es');
-    setLangPt(code === 'pt');
-    setLangFr(code === 'fr');
-    setLangEn(code === 'en');
-  };
-
   const [isEditing, setIsEditing] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
-  const [passForm, setPassForm] = useState({ current: '', new: '', confirm: '' });
-
-  // Estado 2FA
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
   const [twoFAModalVisible, setTwoFAModalVisible] = useState(false);
   const [twoFAEnabled, setTwoFAEnabled] = useState(user?.twoFAEnabled || false);
-  const [twoFAMethod, setTwoFAMethod] = useState(user?.twoFAMethod || 'email'); // 'email' o 'sms'
-  const [twoFAStep, setTwoFAStep] = useState('config');   // 'config' o 'verify'
+  const [twoFAMethod, setTwoFAMethod] = useState(user?.twoFAMethod || 'email');
+  const [twoFAStep, setTwoFAStep] = useState('config');
   const [twoFACode, setTwoFACode] = useState('');
-  const [twoFAGeneratedCode] = useState('847291');        // Código simulado
-
-  const [tempUser, setTempUser] = useState({
+  const [form, setForm] = useState({
     name: user?.name || 'Usuario Demo',
     email: user?.email || 'usuario@correo.com',
-    phone: user?.phone || '+57 300 000 0000'
+    phone: user?.phone || '+57 300 000 0000',
   });
-
-  const validateEmail = (email) => {
-    return String(email)
-      .toLowerCase()
-      .match(
-        /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
-      );
-  };
-
-  const handleSave = async () => {
-    try {
-      // Solo actualizamos el teléfono, ya que el nombre y correo vienen del colegio
-      await authService.updateProfile(user.email, tempUser.name, tempUser.phone);
-      await updateUserInSession({ phone: tempUser.phone });
-      setIsEditing(false);
-      Alert.alert("Perfil", "Información actualizada correctamente.");
-    } catch (e) {
-      Alert.alert("Error", "No se pudo actualizar la información.");
-    }
-  };
-
-  // ── Validadores de contraseña ──────────────────────────────────
-  const hasUpperCase  = (v) => /[A-Z]/.test(v);
-  const hasLowerCase  = (v) => /[a-z]/.test(v);
-  const hasNumber     = (v) => /[0-9]/.test(v);
-  const hasSpecial    = (v) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
-  const hasMinLength  = (v) => v.length >= 8;
+  const [emailForm, setEmailForm] = useState({ currentPassword: '', nextEmail: form.email });
+  const [passForm, setPassForm] = useState({ current: '', next: '', confirm: '' });
 
   const passReqs = {
-    minLen:  hasMinLength(passForm.new),
-    upper:   hasUpperCase(passForm.new),
-    lower:   hasLowerCase(passForm.new),
-    number:  hasNumber(passForm.new),
-    special: hasSpecial(passForm.new),
-    match:   passForm.new.length > 0 && passForm.new === passForm.confirm,
+    minLen: hasMinLength(passForm.next),
+    upper: hasUpperCase(passForm.next),
+    lower: hasLowerCase(passForm.next),
+    number: hasNumber(passForm.next),
+    special: hasSpecial(passForm.next),
+    match: passForm.next.length > 0 && passForm.next === passForm.confirm,
   };
   const allPassReqsMet = Object.values(passReqs).every(Boolean);
 
-  const handleChangePassword = async () => {
-    if (!passForm.current) {
-      Alert.alert('Error', 'Ingresa tu contraseña actual.'); return;
+  const handleSaveProfile = async () => {
+    if (!form.name.trim() || !form.phone.trim()) {
+      Alert.alert(t('error'), t('invalidInput'));
+      return;
     }
-    if (!allPassReqsMet) {
-      Alert.alert('Seguridad', 'La nueva contraseña no cumple todos los requisitos.'); return;
-    }
-
     try {
-      await authService.updatePassword(user.email, passForm.current, passForm.new);
-      setPassModalVisible(false);
-      setPassForm({ current: '', new: '', confirm: '' });
-      Alert.alert('Éxito', 'Tu contraseña ha sido actualizada correctamente.');
+      await authService.updateProfile(user.email, form.name.trim(), form.phone.trim());
+      await updateUserInSession({ name: form.name.trim(), phone: form.phone.trim() });
+      setIsEditing(false);
+      Alert.alert(t('profileTitle'), t('profileUpdated'));
     } catch (error) {
-      Alert.alert('Error', error.message || 'No se pudo actualizar la contraseña.');
+      Alert.alert(t('error'), error.message || t('profileUpdateFailed'));
     }
   };
 
-  const SettingItem = ({ label, subtitle, value, onValueChange, rightIcon, disabled }) => (
-    <View style={[styles.settingItem, !!disabled && { opacity: 0.7 }]}>
+  const handleChangeEmail = async () => {
+    if (!isValidEmail(emailForm.nextEmail)) {
+      Alert.alert(t('error'), t('authInvalidEmail'));
+      return;
+    }
+    if (!emailForm.currentPassword) {
+      Alert.alert(t('error'), t('profilePasswordCurrentRequired'));
+      return;
+    }
+    try {
+      const updated = await authService.updateEmail(user.email, emailForm.currentPassword, emailForm.nextEmail);
+      const nextEmail = updated.email;
+      setForm(current => ({ ...current, email: nextEmail }));
+      await updateUserInSession({ email: nextEmail });
+      setEmailModalVisible(false);
+      setEmailForm({ currentPassword: '', nextEmail });
+      Alert.alert(t('success'), t('profileUpdated'));
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('profileUpdateFailed'));
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passForm.current) {
+      Alert.alert(t('error'), t('profilePasswordCurrentRequired'));
+      return;
+    }
+    if (!allPassReqsMet) {
+      Alert.alert(t('profileSecurity'), t('profilePasswordRulesFailed'));
+      return;
+    }
+    try {
+      await authService.updatePassword(form.email, passForm.current, passForm.next);
+      setPassModalVisible(false);
+      setPassForm({ current: '', next: '', confirm: '' });
+      Alert.alert(t('success'), t('profilePasswordUpdated'));
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('profilePasswordUpdateFailed'));
+    }
+  };
+
+  const SettingItem = ({ label, subtitle, value, onValueChange, disabled }) => (
+    <View style={[styles.settingItem, disabled && { opacity: 0.7 }]}>
       <View style={styles.settingTextCol}>
-        <Text style={styles.settingLabel}>{label || ''}</Text>
-        {!!subtitle && <Text style={styles.settingSub}>{subtitle}</Text>}
+        <Text style={[styles.settingLabel, { color: colors.text }]}>{label}</Text>
+        {!!subtitle && <Text style={[styles.settingSub, { color: colors.textSecondary }]}>{subtitle}</Text>}
       </View>
-      {onValueChange ? (
-        <Switch
-          value={!!value}
-          onValueChange={disabled ? null : onValueChange}
-          color={disabled ? COLORS.TEXTO_SECUNDARIO : COLORS.ACENTO}
-          disabled={!!disabled}
-        />
-      ) : (
-        <MaterialCommunityIcons name={rightIcon || "chevron-right"} size={20} color={COLORS.TEXTO_SECUNDARIO} />
-      )}
+      <Switch value={!!value} onValueChange={disabled ? undefined : onValueChange} color={disabled ? colors.textSecondary : colors.accent} disabled={!!disabled} />
+    </View>
+  );
+
+  const Field = ({ label, value, onChangeText, editable = true, keyboardType = 'default', secureTextEntry = false }) => (
+    <View style={styles.inputWrap}>
+      <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput
+        mode="outlined"
+        value={value}
+        onChangeText={onChangeText}
+        editable={editable}
+        keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        dense
+        style={[styles.input, { backgroundColor: editable ? colors.surfaceSecondary : colors.background }]}
+        outlineColor={colors.border}
+        activeOutlineColor={colors.primary}
+        textColor={editable ? colors.text : colors.textSecondary}
+      />
+    </View>
+  );
+
+  const Requirement = ({ ok, label }) => (
+    <View style={styles.checkRow}>
+      <MaterialCommunityIcons name={ok ? 'check-circle' : 'circle-outline'} size={13} color={ok ? colors.accent : colors.textSecondary} />
+      <Text style={[styles.checkLabel, { color: ok ? colors.accent : colors.textSecondary }]}>{label}</Text>
     </View>
   );
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, isWeb && styles.scrollContentWeb, { paddingBottom: insets.bottom + 40 }]}
-      >
-
-        {/* Cabecera */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, isWide && styles.scrollContentWeb, { paddingBottom: insets.bottom + 40 }]}>
         <View style={styles.pageHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {viewMode === 'language' && (
-              <TouchableOpacity
-                onPress={() => setViewMode('main')}
-                style={{ marginRight: 12, padding: 4 }}
-              >
-                <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.NEGRO} />
-              </TouchableOpacity>
-            )}
-            <View>
-              <Text style={styles.pageTitle}>{t('tabProfile')}</Text>
-              <Text style={styles.pageSubtitle}>
-                {viewMode === 'main'
-                ? t('profileTitle')
-                : t('profileLangSelect')}
-              </Text>
-            </View>
+          <View>
+            <Text style={[styles.pageTitle, { color: colors.text }]}>{t('tabProfile')}</Text>
+            <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>{t('profileTitle')}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.globeIconWrap}
-            onPress={() => setViewMode(viewMode === 'main' ? 'language' : 'main')}
-          >
-            <MaterialCommunityIcons name={viewMode === 'main' ? "web" : "close"} size={32} color={COLORS.BLANCO} />
-          </TouchableOpacity>
         </View>
 
-        {/* Información Personal (Siempre visible) */}
-        <Surface style={styles.card} elevation={1}>
+        <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{t('profileTitle')}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('profileTitle')}</Text>
+            <Button mode={isEditing ? 'contained' : 'outlined'} compact onPress={() => isEditing ? handleSaveProfile() : setIsEditing(true)} buttonColor={isEditing ? colors.primary : undefined} textColor={isEditing ? colors.textOnPrimary : colors.primary}>
+              {isEditing ? t('profileSave') : t('profileEdit')}
+            </Button>
           </View>
-          <View style={styles.profileRow}>
-            <Avatar.Text
-              size={60}
-              label={tempUser.name.substring(0, 2).toUpperCase()}
-              backgroundColor={COLORS.PRIMARIO_SUAVE}
-              color={COLORS.BLANCO}
-            />
+          <View style={[styles.profileRow, !isWide && styles.profileRowMobile]}>
+            <Avatar.Text size={60} label={form.name.substring(0, 2).toUpperCase()} style={{ backgroundColor: colors.primary }} color={colors.textOnPrimary} />
             <View style={styles.profileInputs}>
+              <Field label={t('profileName')} value={form.name} editable={isEditing} onChangeText={name => setForm(current => ({ ...current, name }))} />
+              <Field label={t('profilePhone')} value={form.phone} editable={isEditing} keyboardType="phone-pad" onChangeText={phone => setForm(current => ({ ...current, phone }))} />
               <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>{t('profileName')}</Text>
-                <TextInput
-                  mode="outlined"
-                  value={tempUser.name}
-                  dense
-                  style={[styles.readOnlyInput, { backgroundColor: COLORS.FONDO_SECUNDARIO }]}
-                  editable={false}
-                  outlineColor={COLORS.GRIS_BORDE}
-                  textColor={COLORS.TEXTO_SECUNDARIO}
-                />
+                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t('profileEmail')}</Text>
+                <View style={styles.emailRow}>
+                  <TextInput mode="outlined" value={form.email} editable={false} dense style={[styles.input, styles.emailInput, { backgroundColor: colors.background }]} outlineColor={colors.border} textColor={colors.textSecondary} />
+                  <IconButton icon="pencil-lock-outline" iconColor={colors.primary} onPress={() => { setEmailForm({ currentPassword: '', nextEmail: form.email }); setEmailModalVisible(true); }} />
+                </View>
               </View>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>{t('profileEmail')}</Text>
-                <TextInput
-                  mode="outlined"
-                  value={tempUser.email}
-                  dense
-                  style={[styles.readOnlyInput, { backgroundColor: COLORS.FONDO_SECUNDARIO }]}
-                  editable={false}
-                  outlineColor={COLORS.GRIS_BORDE}
-                  textColor={COLORS.TEXTO_SECUNDARIO}
-                />
-              </View>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>{t('profilePhone')}</Text>
-                <TextInput
-                  mode="outlined"
-                  value={tempUser.phone}
-                  keyboardType="phone-pad"
-                  dense
-                  style={[styles.readOnlyInput, { backgroundColor: COLORS.FONDO_SECUNDARIO }]}
-                  editable={false}
-                  outlineColor={COLORS.GRIS_BORDE}
-                  textColor={COLORS.TEXTO_SECUNDARIO}
-                />
-              </View>
+              {isEditing && (
+                <Button mode="text" textColor={colors.textSecondary} onPress={() => { setIsEditing(false); setForm({ name: user?.name || form.name, email: user?.email || form.email, phone: user?.phone || form.phone }); }}>
+                  {t('profileCancel')}
+                </Button>
+              )}
             </View>
           </View>
         </Surface>
 
-        {viewMode === 'main' ? (
-          <>
-            {/* Preferencias de Notificaciones */}
-            <Surface style={styles.card} elevation={1}>
-              <Text style={styles.cardTitle}>{t('profileNotifications')}</Text>
-              <Text style={styles.cardSubtitleInfo}>{t('live') === 'Live' ? 'Configure when you want to receive alerts' : 'Configura cuando deseas recibir alerta'}</Text>
+        <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t('profileNotifications')}</Text>
+          <Text style={[styles.cardSubtitleInfo, { color: colors.textSecondary }]}>{t('profileNotificationsHelp')}</Text>
+          <SettingItem label={t('profileArrival')} subtitle={t('profileRequired')} value disabled />
+          <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SettingItem label={t('profileDeparture')} subtitle={t('profileRequired')} value disabled />
+          <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SettingItem label={t('profileDeviation')} subtitle={t('profileRequired')} value disabled />
+          <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SettingItem label={t('profileBattery')} value={notifBateria} onValueChange={setNotifBateria} />
+          <Text style={[styles.cardTitle, { marginTop: 20, color: colors.text }]}>{t('profileNotificationChannels')}</Text>
+          <SettingItem label={t('profileEmailNotif')} value={notifEmail} onValueChange={setNotifEmail} />
+          <SettingItem label={t('profileSMSNotif')} value={notifSMS} onValueChange={setNotifSMS} />
+        </Surface>
 
-              <SettingItem
-                label={t('profileArrival')}
-                subtitle="(Obligatorio)"
-                value={true}
-                disabled={true}
-              />
-              <Divider style={styles.divider} />
-              <SettingItem
-                label={t('profileDeparture')}
-                subtitle="(Obligatorio)"
-                value={true}
-                disabled={true}
-              />
-              <Divider style={styles.divider} />
-              <SettingItem
-                label={t('profileDeviation')}
-                subtitle="(Obligatorio)"
-                value={true}
-                disabled={true}
-              />
-              <Divider style={styles.divider} />
-              <SettingItem
-                label={t('profileBattery')}
-                subtitle=""
-                value={notifBateria}
-                onValueChange={setNotifBateria}
-              />
+        <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t('profileSecurity')}</Text>
+          <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.surfaceSecondary }]} onPress={() => setPassModalVisible(true)}>
+            <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileChangePass')}</Text>
+            <MaterialCommunityIcons name="arrow-right" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.surfaceSecondary }]} onPress={() => { setTwoFAStep('config'); setTwoFACode(''); setTwoFAModalVisible(true); }}>
+            <View>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profile2FA')}</Text>
+              <Text style={[styles.settingSub, { color: colors.textSecondary }]}>{twoFAEnabled ? t('profileEnabled') : t('profileDisabled')}</Text>
+            </View>
+            <MaterialCommunityIcons name="arrow-right" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </Surface>
 
-              <Text style={[styles.cardTitle, { marginTop: 20 }]}>{t('live') === 'Live' ? 'Notification Channels' : 'Canales de Notificación'}</Text>
+        <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t('profileInfo')}</Text>
+          <View style={[styles.infoRow, { backgroundColor: colors.surfaceSecondary }]}>
+            <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileAppVersion')}</Text>
+            <Text style={[styles.infoValueText, { color: colors.textSecondary }]}>1.5</Text>
+          </View>
+          <View style={[styles.infoRow, { backgroundColor: colors.surfaceSecondary }]}>
+            <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileAccountType')}</Text>
+            <View style={[styles.badgeGreen, { backgroundColor: colors.accentLight }]}>
+              <Text style={[styles.badgeGreenText, { color: colors.accent }]}>{t('profileParentGuardian')}</Text>
+            </View>
+          </View>
+        </Surface>
 
-              <View style={styles.simpleRow}>
-                <Text style={styles.settingLabel}>{t('profileEmailNotif')}</Text>
-                <Switch value={notifEmail} onValueChange={setNotifEmail} color={COLORS.ACENTO} />
-              </View>
-              <View style={{ height: 8 }} />
-              <View style={styles.simpleRow}>
-                <Text style={styles.settingLabel}>{t('profileSMSNotif')}</Text>
-                <Switch value={notifSMS} onValueChange={setNotifSMS} color={COLORS.ACENTO} />
-              </View>
-            </Surface>
-
-            {/* Seguridad */}
-            <Surface style={styles.card} elevation={1}>
-              <Text style={styles.cardTitle}>{t('profileSecurity')}</Text>
-              <View style={{ marginTop: 10 }}>
-                <TouchableOpacity
-                  style={styles.simpleRow}
-                  onPress={() => setPassModalVisible(true)}
-                >
-                  <Text style={styles.settingLabel}>{t('profileChangePass')}</Text>
-                  <MaterialCommunityIcons name="arrow-right" size={16} color={COLORS.TEXTO_SECUNDARIO} />
-                </TouchableOpacity>
-                <View style={{ height: 8 }} />
-                <TouchableOpacity
-                  style={styles.simpleRow}
-                  onPress={() => { setTwoFAStep('config'); setTwoFACode(''); setTwoFAModalVisible(true); }}
-                >
-                  <View>
-                    <Text style={styles.settingLabel}>{t('profile2FA')}</Text>
-                    <Text style={styles.settingSub}>{twoFAEnabled ? '✅ ' + (t('live') === 'Live' ? 'Enabled' : 'Activada') : (t('live') === 'Live' ? 'Disabled' : 'Desactivada')}</Text>
-                  </View>
-                  <MaterialCommunityIcons name="arrow-right" size={16} color={COLORS.TEXTO_SECUNDARIO} />
-                </TouchableOpacity>
-              </View>
-            </Surface>
-
-            {/* Información */}
-            <Surface style={styles.card} elevation={1}>
-              <Text style={styles.cardTitle}>{t('live') === 'Live' ? 'Information' : 'Información'}</Text>
-              <View style={{ marginTop: 10 }}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.settingLabel}>{t('live') === 'Live' ? 'App Version' : 'Version de Aplicacion'}</Text>
-                  <Text style={styles.infoValueText}>1.5</Text>
-                </View>
-                <View style={{ height: 8 }} />
-                <View style={styles.infoRow}>
-                  <Text style={styles.settingLabel}>{t('live') === 'Live' ? 'Account Type' : 'Tipo de Cuenta'}</Text>
-                  <View style={styles.badgeGreen}>
-                    <Text style={styles.badgeGreenText}>{t('live') === 'Live' ? 'Parent / Guardian' : 'Padre de Familia'}</Text>
-                  </View>
-                </View>
-              </View>
-            </Surface>
-
-            {/* Botón Cerrar Sesión Rojo */}
-            <Button
-              mode="contained"
-              style={styles.logoutBtnRed}
-              buttonColor={COLORS.ALERTA}
-              textColor={COLORS.BLANCO}
-              icon="logout"
-              onPress={logout}
-            >
-              {t('profileLogout')}
-            </Button>
-          </>
-        ) : (
-          <>
-            {/* Vista Idiomas */}
-            <Surface style={styles.card} elevation={1}>
-              <Text style={styles.cardTitle}>Idiomas</Text>
-              <Text style={styles.cardSubtitleInfo}>Lenguaje Internacional</Text>
-
-              <SettingItem
-                label="Español"
-                subtitle="Por defecto, idioma español"
-                value={langEs}
-                onValueChange={() => handleLanguageChange('es')}
-              />
-              <Divider style={styles.divider} />
-              <SettingItem
-                label="Portugues"
-                subtitle="Coloca la aplicacion en idioma Portugues"
-                value={langPt}
-                onValueChange={() => handleLanguageChange('pt')}
-              />
-              <Divider style={styles.divider} />
-              <SettingItem
-                label="Frances"
-                subtitle="Coloca la aplicacion en idioma Frances"
-                value={langFr}
-                onValueChange={() => handleLanguageChange('fr')}
-              />
-              <Divider style={styles.divider} />
-              <SettingItem
-                label="Ingles"
-                subtitle="Coloca la aplicacion en idioma de Ingles"
-                value={langEn}
-                onValueChange={() => handleLanguageChange('en')}
-              />
-            </Surface>
-
-            {/* Botón Cerrar Sesión Azul (O Volver) */}
-            <Button
-              mode="contained"
-              style={styles.logoutBtnRed}
-              buttonColor={COLORS.ALERTA}
-              onPress={logout}
-            >
-              Cerrar Sesión
-            </Button>
-          </>
-        )}
-
+        <Button mode="contained" style={styles.logoutBtnRed} buttonColor={colors.error} textColor={colors.textOnPrimary} icon="logout" onPress={logout}>
+          {t('profileLogout')}
+        </Button>
       </ScrollView>
 
-      {/* Modal Cambio de Contraseña */}
-      <Modal
-        visible={passModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPassModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Surface style={styles.modalSheet} elevation={5}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Cambiar Contraseña</Text>
-              <IconButton icon="close" size={20} onPress={() => { setPassModalVisible(false); setPassForm({ current: '', new: '', confirm: '' }); }} />
+      <Modal visible={emailModalVisible} transparent animationType="fade" onRequestClose={() => setEmailModalVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Surface style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={5}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profileEmail')}</Text>
+              <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setEmailModalVisible(false)} />
             </View>
-
-            {/* Contraseña Actual */}
-            <View style={styles.inputBox}>
-              <Text style={styles.fieldLabel}>Contraseña Actual</Text>
-              <TextInput
-                mode="outlined" secureTextEntry
-                value={passForm.current}
-                onChangeText={v => setPassForm({...passForm, current: v})}
-                style={styles.readOnlyInput}
-                outlineColor={COLORS.GRIS_BORDE} activeOutlineColor={COLORS.PRIMARIO} textColor={COLORS.NEGRO}
-                left={<TextInput.Icon icon="lock-outline" color={COLORS.TEXTO_SECUNDARIO} />}
-              />
-            </View>
-
-            {/* Nueva Contraseña */}
-            <View style={styles.inputBox}>
-              <Text style={styles.fieldLabel}>Nueva Contraseña</Text>
-              <TextInput
-                mode="outlined" secureTextEntry
-                value={passForm.new}
-                onChangeText={v => setPassForm({...passForm, new: v})}
-                style={styles.readOnlyInput}
-                outlineColor={passForm.new && !passReqs.minLen ? COLORS.ALERTA : COLORS.GRIS_BORDE}
-                activeOutlineColor={COLORS.PRIMARIO} textColor={COLORS.NEGRO}
-                left={<TextInput.Icon icon="lock-plus-outline" color={COLORS.TEXTO_SECUNDARIO} />}
-              />
-              {/* Checklist en tiempo real */}
-              {passForm.new.length > 0 && (
-                <View style={styles.reqsBox}>
-                  <Text style={styles.reqsTitle}>Requisitos de Seguridad:</Text>
-                  {[
-                    [passReqs.minLen,  'Mínimo 8 caracteres'],
-                    [passReqs.upper,   'Al menos una letra mayúscula'],
-                    [passReqs.lower,   'Al menos una letra minúscula'],
-                    [passReqs.number,  'Al menos un número'],
-                    [passReqs.special, 'Al menos un carácter especial (!@#$%...)'],
-                  ].map(([ok, label]) => (
-                    <View key={label} style={styles.checkRow}>
-                      <MaterialCommunityIcons name={ok ? 'check-circle' : 'circle-outline'} size={13} color={ok ? COLORS.ACENTO : COLORS.TEXTO_SECUNDARIO} />
-                      <Text style={[styles.checkLabel, ok && { color: COLORS.ACENTO }]}>{label}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Confirmar Nueva Contraseña */}
-            <View style={styles.inputBox}>
-              <Text style={styles.fieldLabel}>Confirmar Nueva Contraseña</Text>
-              <TextInput
-                mode="outlined" secureTextEntry
-                value={passForm.confirm}
-                onChangeText={v => setPassForm({...passForm, confirm: v})}
-                style={styles.readOnlyInput}
-                outlineColor={passForm.confirm && !passReqs.match ? COLORS.ALERTA : COLORS.GRIS_BORDE}
-                activeOutlineColor={COLORS.PRIMARIO} textColor={COLORS.NEGRO}
-                left={<TextInput.Icon icon="lock-check-outline" color={COLORS.TEXTO_SECUNDARIO} />}
-              />
-              {passForm.confirm.length > 0 && (
-                <View style={styles.checkRow}>
-                  <MaterialCommunityIcons
-                    name={passReqs.match ? 'check-circle' : 'close-circle'}
-                    size={13}
-                    color={passReqs.match ? COLORS.ACENTO : COLORS.ALERTA}
-                  />
-                  <Text style={[styles.checkLabel, { color: passReqs.match ? COLORS.ACENTO : COLORS.ALERTA }]}>
-                    {passReqs.match ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <Button
-              mode="contained"
-              onPress={handleChangePassword}
-              style={{ marginTop: 10, borderRadius: 8 }}
-              buttonColor={allPassReqsMet ? COLORS.PRIMARIO : COLORS.GRIS_BORDE}
-              textColor={COLORS.BLANCO}
-            >
-              Actualizar Contraseña
+            <Field label={t('profileEmail')} value={emailForm.nextEmail} keyboardType="email-address" onChangeText={nextEmail => setEmailForm(current => ({ ...current, nextEmail }))} />
+            <Field label={t('profileCurrentPass')} value={emailForm.currentPassword} secureTextEntry onChangeText={currentPassword => setEmailForm(current => ({ ...current, currentPassword }))} />
+            <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} style={styles.modalButton} onPress={handleChangeEmail}>
+              {t('profileSave')}
             </Button>
           </Surface>
         </View>
       </Modal>
 
-      {/* ── Modal Autenticación de Dos Factores ── */}
-      <Modal visible={twoFAModalVisible} transparent animationType="fade" onRequestClose={() => setTwoFAModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <Surface style={styles.modalSheet} elevation={5}>
-
-            {/* Header */}
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialCommunityIcons name="shield-lock-outline" size={22} color={COLORS.PRIMARIO} style={{ marginRight: 8 }} />
-                <Text style={styles.modalTitle}>Autenticación de Dos Factores</Text>
-              </View>
-              <IconButton icon="close" size={20} onPress={() => { setTwoFAModalVisible(false); setTwoFAStep('config'); setTwoFACode(''); }} />
+      <Modal visible={passModalVisible} transparent animationType="fade" onRequestClose={() => setPassModalVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Surface style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={5}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profileChangePass')}</Text>
+              <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setPassModalVisible(false)} />
             </View>
+            <Field label={t('profileCurrentPass')} value={passForm.current} secureTextEntry onChangeText={current => setPassForm(prev => ({ ...prev, current }))} />
+            <Field label={t('profileNewPass')} value={passForm.next} secureTextEntry onChangeText={next => setPassForm(prev => ({ ...prev, next }))} />
+            {passForm.next.length > 0 && (
+              <View style={[styles.reqsBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                <Requirement ok={passReqs.minLen} label={t('securityMinLength')} />
+                <Requirement ok={passReqs.upper} label={t('securityUpper')} />
+                <Requirement ok={passReqs.lower} label={t('securityLower')} />
+                <Requirement ok={passReqs.number} label={t('securityNumber')} />
+                <Requirement ok={passReqs.special} label={t('securitySpecial')} />
+              </View>
+            )}
+            <Field label={t('profileConfirmPass')} value={passForm.confirm} secureTextEntry onChangeText={confirm => setPassForm(prev => ({ ...prev, confirm }))} />
+            <Button mode="contained" onPress={handleChangePassword} style={styles.modalButton} buttonColor={allPassReqsMet ? colors.primary : colors.border} textColor={allPassReqsMet ? colors.textOnPrimary : colors.textSecondary}>
+              {t('profileUpdatePass')}
+            </Button>
+          </Surface>
+        </View>
+      </Modal>
 
+      <Modal visible={twoFAModalVisible} transparent animationType="fade" onRequestClose={() => setTwoFAModalVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Surface style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={5}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profile2FA')}</Text>
+              <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setTwoFAModalVisible(false)} />
+            </View>
             {twoFAStep === 'config' ? (
               <View>
-                {/* Estado actual */}
-                <View style={styles.twoFAStatusBox}>
-                  <MaterialCommunityIcons
-                    name={twoFAEnabled ? 'shield-check' : 'shield-off-outline'}
-                    size={32}
-                    color={twoFAEnabled ? COLORS.ACENTO : COLORS.TEXTO_SECUNDARIO}
-                  />
+                <View style={[styles.twoFAStatusBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                  <MaterialCommunityIcons name={twoFAEnabled ? 'shield-check' : 'shield-off-outline'} size={32} color={twoFAEnabled ? colors.accent : colors.textSecondary} />
                   <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.twoFAStatusTitle}>{twoFAEnabled ? '2FA Activada' : '2FA Desactivada'}</Text>
-                    <Text style={styles.twoFAStatusSub}>{twoFAEnabled ? 'Tu cuenta está protegida con verificación extra.' : 'Activa esta función para mayor seguridad.'}</Text>
+                    <Text style={[styles.twoFAStatusTitle, { color: colors.text }]}>{twoFAEnabled ? t('twoFAActive') : t('twoFAInactive')}</Text>
+                    <Text style={[styles.twoFAStatusSub, { color: colors.textSecondary }]}>{twoFAEnabled ? t('twoFAProtected') : t('twoFAEnableHelp')}</Text>
                   </View>
-                  <Switch
-                    value={twoFAEnabled}
-                    onValueChange={async (v) => {
-                      if (!v) {
-                        try {
-                          await authService.update2FA(user.email, false);
-                          await updateUserInSession({ twoFAEnabled: false });
-                          setTwoFAEnabled(false);
-                        } catch (e) {
-                          Alert.alert('Error', 'No se pudo desactivar el 2FA.');
-                        }
-                      } else {
-                        setTwoFAStep('verify');
-                      }
-                    }}
-                    color={COLORS.ACENTO}
-                  />
+                  <Switch value={twoFAEnabled} color={colors.accent} onValueChange={async (enabled) => {
+                    if (!enabled) {
+                      await authService.update2FA(form.email, false);
+                      await updateUserInSession({ twoFAEnabled: false });
+                      setTwoFAEnabled(false);
+                    } else {
+                      setTwoFAStep('verify');
+                    }
+                  }} />
                 </View>
-
-                {twoFAEnabled ? (
-                  <View>
-                    <Text style={styles.twoFALabel}>Método de verificación activo:</Text>
-                    <View style={[styles.twoFAMethodBtn, { borderColor: COLORS.ACENTO, backgroundColor: '#F0FAF0' }]}>
-                      <MaterialCommunityIcons name={twoFAMethod === 'email' ? 'email-check-outline' : 'message-check-outline'} size={20} color={COLORS.ACENTO} />
-                      <Text style={{ marginLeft: 8, color: COLORS.ACENTO, fontWeight: '600' }}>{twoFAMethod === 'email' ? 'Correo Electrónico' : 'SMS al teléfono'}</Text>
-                    </View>
-                    <Button mode="outlined" onPress={() => { setTwoFAEnabled(false); }} style={{ marginTop: 12, borderColor: COLORS.ALERTA, borderRadius: 8 }} textColor={COLORS.ALERTA}>
-                      Desactivar 2FA
-                    </Button>
-                  </View>
-                ) : (
-                  <View>
-                    <Text style={styles.twoFALabel}>Elige cómo recibir tu código:</Text>
-                    <TouchableOpacity style={[styles.twoFAMethodBtn, twoFAMethod === 'email' && styles.twoFAMethodActive]} onPress={() => setTwoFAMethod('email')}>
-                      <MaterialCommunityIcons name="email-outline" size={20} color={twoFAMethod === 'email' ? COLORS.PRIMARIO : COLORS.TEXTO_SECUNDARIO} />
-                      <View style={{ marginLeft: 10 }}>
-                        <Text style={[styles.twoFAMethodText, twoFAMethod === 'email' && { color: COLORS.PRIMARIO }]}>Correo Electrónico</Text>
-                        <Text style={styles.twoFAMethodSub}>{tempUser.email}</Text>
-                      </View>
-                      {twoFAMethod === 'email' ? <MaterialCommunityIcons name="check-circle" size={18} color={COLORS.PRIMARIO} style={{ marginLeft: 'auto' }} /> : null}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.twoFAMethodBtn, twoFAMethod === 'sms' && styles.twoFAMethodActive]} onPress={() => setTwoFAMethod('sms')}>
-                      <MaterialCommunityIcons name="message-outline" size={20} color={twoFAMethod === 'sms' ? COLORS.PRIMARIO : COLORS.TEXTO_SECUNDARIO} />
-                      <View style={{ marginLeft: 10 }}>
-                        <Text style={[styles.twoFAMethodText, twoFAMethod === 'sms' && { color: COLORS.PRIMARIO }]}>SMS al teléfono</Text>
-                        <Text style={styles.twoFAMethodSub}>{tempUser.phone}</Text>
-                      </View>
-                      {twoFAMethod === 'sms' ? <MaterialCommunityIcons name="check-circle" size={18} color={COLORS.PRIMARIO} style={{ marginLeft: 'auto' }} /> : null}
-                    </TouchableOpacity>
-                    <Button mode="contained" onPress={() => setTwoFAStep('verify')} style={{ marginTop: 12, borderRadius: 8 }} buttonColor={COLORS.PRIMARIO}>
-                      Enviar código de verificación
-                    </Button>
-                  </View>
-                )}
+                {!twoFAEnabled && ['email', 'sms'].map(method => (
+                  <TouchableOpacity key={method} style={[styles.twoFAMethodBtn, { backgroundColor: colors.surfaceSecondary, borderColor: twoFAMethod === method ? colors.primary : colors.border }]} onPress={() => setTwoFAMethod(method)}>
+                    <MaterialCommunityIcons name={method === 'email' ? 'email-outline' : 'message-outline'} size={20} color={twoFAMethod === method ? colors.primary : colors.textSecondary} />
+                    <Text style={[styles.twoFAMethodText, { color: colors.text }]}>{method === 'email' ? t('twoFAEmail') : t('twoFASMS')}</Text>
+                  </TouchableOpacity>
+                ))}
+                {!twoFAEnabled && <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={() => setTwoFAStep('verify')}>{t('twoFASendCode')}</Button>}
               </View>
             ) : (
               <View>
-                <View style={styles.twoFACodeBox}>
-                  <MaterialCommunityIcons name="message-badge-outline" size={36} color={COLORS.PRIMARIO} />
-                  <Text style={styles.twoFACodeTitle}>Código enviado</Text>
-                  <Text style={styles.twoFACodeSub}>{'Se envió un código de 6 dígitos a tu ' + (twoFAMethod === 'email' ? 'correo: ' + tempUser.email : 'teléfono: ' + tempUser.phone)}</Text>
-                  <Text style={styles.twoFADemoCode}>{'Código demo: ' + twoFAGeneratedCode}</Text>
-                </View>
-                <View style={styles.inputBox}>
-                  <Text style={styles.fieldLabel}>Ingresa el código de 6 dígitos</Text>
-                  <TextInput
-                    mode="outlined" value={twoFACode} onChangeText={setTwoFACode}
-                    keyboardType="number-pad" maxLength={6}
-                    style={[styles.readOnlyInput, { letterSpacing: 8, textAlign: 'center', fontSize: 20 }]}
-                    outlineColor={COLORS.GRIS_BORDE} activeOutlineColor={COLORS.PRIMARIO} textColor={COLORS.NEGRO}
-                  />
-                </View>
-                <Button
-                  mode="contained"
-                  onPress={async () => {
-                    if (twoFACode === twoFAGeneratedCode) {
-                      try {
-                        await authService.update2FA(user.email, true, twoFAMethod);
-                        await updateUserInSession({ twoFAEnabled: true, twoFAMethod });
-                        setTwoFAEnabled(true);
-                        setTwoFAModalVisible(false);
-                        setTwoFAStep('config');
-                        setTwoFACode('');
-                        Alert.alert('✅ 2FA Activada', 'La autenticación de dos factores ha sido activada correctamente.');
-                      } catch (e) {
-                        Alert.alert('Error', 'No se pudo activar el 2FA.');
-                      }
-                    } else {
-                      Alert.alert('Código incorrecto', 'El código ingresado no es válido. Inténtalo de nuevo.');
-                    }
-                  }}
-                  style={{ marginTop: 8, borderRadius: 8 }}
-                  buttonColor={twoFACode.length === 6 ? COLORS.PRIMARIO : COLORS.GRIS_BORDE}
-                  textColor={COLORS.BLANCO}
-                >
-                  Verificar y Activar
-                </Button>
-                <Button mode="text" onPress={() => { setTwoFAStep('config'); setTwoFACode(''); }} textColor={COLORS.TEXTO_SECUNDARIO} style={{ marginTop: 4 }}>
-                  Volver
-                </Button>
+                <Text style={[styles.twoFAStatusSub, { color: colors.textSecondary, marginBottom: 12 }]}>{t('twoFADemoCode')} 847291</Text>
+                <Field label={t('twoFAEnterCode')} value={twoFACode} keyboardType="number-pad" onChangeText={setTwoFACode} />
+                <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={async () => {
+                  if (twoFACode !== '847291') {
+                    Alert.alert(t('error'), t('twoFAInvalidCode'));
+                    return;
+                  }
+                  await authService.update2FA(form.email, true, twoFAMethod);
+                  await updateUserInSession({ twoFAEnabled: true, twoFAMethod });
+                  setTwoFAEnabled(true);
+                  setTwoFAModalVisible(false);
+                  setTwoFAStep('config');
+                  setTwoFACode('');
+                  Alert.alert(t('twoFAActivationTitle'), t('twoFAActivated'));
+                }}>{t('twoFAVerifyActivate')}</Button>
               </View>
             )}
           </Surface>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.FONDO_PRINCIPAL },
-  scroll: { flex: 1 },
+  container: { flex: 1 },
   scrollContent: { padding: 16 },
-  scrollContentWeb: { maxWidth: 800, alignSelf: 'center', width: '100%', paddingTop: 40 },
-
+  scrollContentWeb: { maxWidth: 860, alignSelf: 'center', width: '100%', paddingTop: 40 },
   pageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  pageTitle: { fontSize: 22, fontWeight: 'bold', color: COLORS.NEGRO },
-  pageSubtitle: { fontSize: 12, color: COLORS.TEXTO_SECUNDARIO, marginTop: 4 },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20
-  },
-  modalSheet: {
-    backgroundColor: COLORS.BLANCO,
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 450,
-    elevation: 10
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.GRIS_BORDE,
-    paddingBottom: 10
-  },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.PRIMARIO },
-
-  inputBox: { marginBottom: 16 },
-  fieldLabel: { fontSize: 13, color: COLORS.NEGRO, marginBottom: 6, fontWeight: 'bold' },
-
-  reqsBox: {
-    backgroundColor: '#F0F4FF',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: COLORS.GRIS_BORDE,
-  },
-  reqsTitle: { fontSize: 12, fontWeight: '700', color: COLORS.PRIMARIO, marginBottom: 6 },
-  checkRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3, marginTop: 3 },
-  checkLabel: { fontSize: 12, color: COLORS.TEXTO_SECUNDARIO },
-  readOnlyInput: { height: 45, backgroundColor: COLORS.BLANCO, fontSize: 13 },
-  globeIconWrap: { backgroundColor: COLORS.ACENTO, padding: 8, borderRadius: 30 },
-
-  card: { backgroundColor: COLORS.BLANCO, borderRadius: 12, padding: 16, marginBottom: 16 },
+  pageTitle: { fontSize: 22, fontWeight: 'bold' },
+  pageSubtitle: { fontSize: 12, marginTop: 4 },
+  card: { borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.NEGRO },
-  cardSubtitleInfo: { fontSize: 12, color: COLORS.TEXTO_SECUNDARIO, marginBottom: 16 },
-
-  editBtn: { borderRadius: 8 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold' },
+  cardSubtitleInfo: { fontSize: 12, marginBottom: 16 },
   profileRow: { flexDirection: 'row' },
+  profileRowMobile: { flexDirection: 'column', gap: 16 },
   profileInputs: { flex: 1, marginLeft: 16 },
   inputWrap: { marginBottom: 12 },
-  inputLabel: { fontSize: 11, color: COLORS.TEXTO_SECUNDARIO, marginLeft: 4, marginBottom: 4 },
-  readOnlyInput: { height: 45, backgroundColor: COLORS.FONDO_INPUT, fontSize: 13, justifyContent: 'center' },
-
+  inputLabel: { fontSize: 11, marginLeft: 4, marginBottom: 4 },
+  input: { height: 45, fontSize: 13 },
+  emailRow: { flexDirection: 'row', alignItems: 'center' },
+  emailInput: { flex: 1 },
   settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   settingTextCol: { flex: 1, paddingRight: 16 },
-  settingLabel: { fontSize: 13, color: COLORS.NEGRO, fontWeight: '500' },
-  settingSub: { fontSize: 11, color: COLORS.TEXTO_SECUNDARIO, marginTop: 2 },
-
-  divider: { backgroundColor: COLORS.GRIS_BORDE, marginVertical: 4 },
-
-  simpleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, backgroundColor: COLORS.FONDO_INPUT, paddingHorizontal: 12, borderRadius: 8 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, backgroundColor: COLORS.FONDO_INPUT, paddingHorizontal: 12, borderRadius: 8 },
-  infoValueText: { fontSize: 13, color: COLORS.TEXTO_SECUNDARIO },
-
-  badgeGreen: { backgroundColor: COLORS.ACENTO_CLARO, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  badgeGreenText: { color: COLORS.ACENTO_OSCURO, fontSize: 10, fontWeight: 'bold' },
-
+  settingLabel: { fontSize: 13, fontWeight: '500' },
+  settingSub: { fontSize: 11, marginTop: 2 },
+  divider: { marginVertical: 4 },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8, marginTop: 10 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8, marginTop: 10 },
+  infoValueText: { fontSize: 13 },
+  badgeGreen: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  badgeGreenText: { fontSize: 10, fontWeight: 'bold' },
   logoutBtnRed: { marginTop: 10, borderRadius: 8, paddingVertical: 4 },
-  logoutBtnBlue: { marginTop: 10, borderRadius: 8, paddingVertical: 4 },
-
-  // Estilos 2FA
-  twoFAStatusBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FB', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: COLORS.GRIS_BORDE },
-  twoFAStatusTitle: { fontSize: 14, fontWeight: '700', color: COLORS.NEGRO },
-  twoFAStatusSub: { fontSize: 12, color: COLORS.TEXTO_SECUNDARIO, marginTop: 2 },
-  twoFALabel: { fontSize: 13, fontWeight: '600', color: COLORS.NEGRO, marginBottom: 10 },
-  twoFAMethodBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: COLORS.GRIS_BORDE, borderRadius: 10, padding: 12, marginBottom: 10, backgroundColor: COLORS.BLANCO },
-  twoFAMethodActive: { borderColor: COLORS.PRIMARIO, backgroundColor: '#EEF4FF' },
-  twoFAMethodText: { fontSize: 13, fontWeight: '600', color: COLORS.NEGRO },
-  twoFAMethodSub: { fontSize: 11, color: COLORS.TEXTO_SECUNDARIO, marginTop: 2 },
-  twoFACodeBox: { alignItems: 'center', paddingVertical: 16, marginBottom: 16, backgroundColor: '#F0F4FF', borderRadius: 12, borderWidth: 1, borderColor: COLORS.GRIS_BORDE },
-  twoFACodeTitle: { fontSize: 16, fontWeight: '700', color: COLORS.PRIMARIO, marginTop: 8 },
-  twoFACodeSub: { fontSize: 12, color: COLORS.TEXTO_SECUNDARIO, textAlign: 'center', marginTop: 4, paddingHorizontal: 8 },
-  twoFADemoCode: { fontSize: 13, fontWeight: '700', color: COLORS.ACENTO, marginTop: 8, backgroundColor: '#E8FFE8', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalSheet: { borderRadius: 12, padding: 20, width: '100%', maxWidth: 460, borderWidth: 1 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, paddingBottom: 10 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold' },
+  modalButton: { borderRadius: 8, marginTop: 8 },
+  reqsBox: { borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+  checkLabel: { fontSize: 12 },
+  twoFAStatusBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1 },
+  twoFAStatusTitle: { fontSize: 14, fontWeight: '700' },
+  twoFAStatusSub: { fontSize: 12, marginTop: 2 },
+  twoFAMethodBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10, gap: 10 },
+  twoFAMethodText: { fontSize: 13, fontWeight: '600' },
 });

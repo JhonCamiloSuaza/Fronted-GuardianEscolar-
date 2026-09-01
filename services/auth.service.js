@@ -2,6 +2,14 @@ import { storage } from '../utils/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ACCOUNTS_KEY = 'gps_guardian_accounts';
+const RECOVERY_RATE_KEY = 'gps_guardian_recovery_attempts';
+const RECOVERY_SESSION_KEY = 'gps_guardian_recovery_session';
+const RECOVERY_WINDOW_MS = 15 * 60 * 1000;
+const RECOVERY_MAX_ATTEMPTS = 5;
+const RECOVERY_OTP_TTL_MS = 5 * 60 * 1000;
+const RECOVERY_OTP_MAX_ATTEMPTS = 5;
+const RECOVERY_DEMO_CODE = '847291';
+const RECOVERY_GENERIC_MESSAGE = 'Si existe una cuenta asociada, hemos enviado las instrucciones para recuperar tu contraseña.';
 
 // ─── Helpers de cuentas guardadas ───────────────────────────────────────────
 const getAccounts = async () => {
@@ -33,7 +41,7 @@ export const authService = {
     const accounts = await getAccounts();
     const normalizedEmail = email.trim().toLowerCase();
     const accountIndex = accounts.findIndex(a => a.email.toLowerCase() === normalizedEmail);
-
+    
     if (accountIndex !== -1) {
       accounts[accountIndex].twoFAEnabled = enabled;
       accounts[accountIndex].twoFAMethod = method;
@@ -45,7 +53,7 @@ export const authService = {
 
   /**
    * Login: valida email y contraseña.
-   * Si tiene 2FA activo, devuelve un flag para que el UI pida el código.
+   * Si tiene 2FA activo, devuelve un flag para que el UI pida el codigo.
    */
   login: async (email, password) => {
     return new Promise((resolve, reject) => {
@@ -70,10 +78,10 @@ export const authService = {
 
           // SI TIENE 2FA ACTIVO, NO INICIAMOS SESIÓN AÚN
           if (account.twoFAEnabled) {
-            resolve({
-              requires2FA: true,
+            resolve({ 
+              requires2FA: true, 
               method: account.twoFAMethod || 'email',
-              email: account.email
+              email: account.email 
             });
             return;
           }
@@ -101,12 +109,12 @@ export const authService = {
   },
 
   /**
-   * Finalizar Login 2FA: Una vez validado el código en el UI.
+   * Finalizar Login 2FA: Una vez validado el codigo en el UI.
    */
   complete2FALogin: async (email) => {
     const accounts = await getAccounts();
     const account = accounts.find(a => a.email.toLowerCase() === email.toLowerCase());
-
+    
     if (!account) throw new Error('Usuario no encontrado');
 
     const fakeToken = `mock_token_2fa_${account.id}_${Date.now()}`;
@@ -127,7 +135,7 @@ export const authService = {
   },
 
   /**
-   * Register: guarda la cuenta nueva en AsyncStorage.
+   * Register: guardar? la cuenta nueva en AsyncStorage.
    * Lanza error si el correo ya está registrado.
    */
   register: async ({ name, email, password, phone }) => {
@@ -157,6 +165,188 @@ export const authService = {
   },
 
   /**
+   * Detecta automaticamente si el dato ingresado corresponde a correo o telefono registrado.
+   */
+  findRecoveryContact: async (contact) => {
+    const accounts = await getAccounts();
+    const normalized = contact.trim().toLowerCase();
+    const onlyDigits = contact.replace(/\D/g, '');
+
+    const account = accounts.find((item) => {
+      const accountDigits = (item.phone || '').replace(/\D/g, '');
+      return item.email.toLowerCase() === normalized || (onlyDigits.length >= 7 && accountDigits.endsWith(onlyDigits));
+    });
+
+    if (!account) {
+      throw new Error('No existe una cuenta asociada a ese correo o telefono.');
+    }
+
+    return {
+      exists: true,
+      method: account.email.toLowerCase() === normalized ? 'email' : 'phone',
+      email: account.email,
+      phone: account.phone || '',
+    };
+  },
+
+  /**
+   * Solicita recuperacion sin revelar si el usuario existe.
+   * Detecta correo/telefono internamente y aplica un rate limit local báb?sico.
+   */
+  requestPasswordRecovery: async (contact) => {
+    const normalizedContact = contact.trim().toLowerCase();
+    const now = Date.now();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizedContact);
+    const phoneDigits = contact.replace(/\D/g, '');
+    const isPhone = phoneDigits.length >= 7 && phoneDigits.length <= 15;
+
+    if (!isEmail && !isPhone) {
+      throw new Error('Ingresa un correo electrónico o teléfono válido.');
+    }
+
+    const attemptsRaw = await AsyncStorage.getItem(RECOVERY_RATE_KEY);
+    const attempts = attemptsRaw ? JSON.parse(attemptsRaw) : {};
+    const rateKey = isEmail ? normalizedContact : phoneDigits;
+    const recentAttempts = (attempts[rateKey] || []).filter((timestamp) => now - timestamp < RECOVERY_WINDOW_MS);
+
+    if (recentAttempts.length >= RECOVERY_MAX_ATTEMPTS) {
+      throw new Error('Demasiados intentos. Inténtalo nuevamente en unos minutos.');
+    }
+
+    attempts[rateKey] = [...recentAttempts, now];
+    await AsyncStorage.setItem(RECOVERY_RATE_KEY, JSON.stringify(attempts));
+
+    const startedAt = Date.now();
+    let recoverySession = null;
+    try {
+      const accounts = await getAccounts();
+      const account = accounts.find((item) => {
+        const accountDigits = (item.phone || '').replace(/\D/g, '');
+        return item.email.toLowerCase() === normalizedContact || (isPhone && accountDigits.endsWith(phoneDigits));
+      });
+
+      if (account) {
+        const accountHasEmail = Boolean(account.email);
+        const accountHasPhone = Boolean((account.phone || '').replace(/\D/g, ''));
+        const preferredMethod = account.recoveryPriority?.[0] || account.recoveryMethod || account.twoFAMethod || 'email';
+        const method = preferredMethod === 'phone' && accountHasPhone ? 'phone' : accountHasEmail ? 'email' : accountHasPhone ? 'phone' : null;
+
+        recoverySession = {
+          accountId: account.id,
+          contactKey: rateKey,
+          code: RECOVERY_DEMO_CODE,
+          method,
+          expiresAt: now + RECOVERY_OTP_TTL_MS,
+          attempts: 0,
+          verified: false,
+          used: false,
+        };
+      }
+    } finally {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 700) {
+        await new Promise(resolve => setTimeout(resolve, 700 - elapsed));
+      }
+    }
+
+    await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify(recoverySession || {
+      accountId: null,
+      contactKey: rateKey,
+      code: null,
+      method: null,
+      expiresAt: now + RECOVERY_OTP_TTL_MS,
+      attempts: 0,
+      verified: false,
+      used: false,
+    }));
+
+    return { success: true, message: RECOVERY_GENERIC_MESSAGE };
+  },
+
+  getRecoverySession: async () => {
+    const raw = await AsyncStorage.getItem(RECOVERY_SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  },
+
+  verifyRecoveryCode: async (code) => {
+    const session = await authService.getRecoverySession();
+    const now = Date.now();
+
+    if (!session || session.used) {
+      throw new Error('Código inválido');
+    }
+
+    if (now > session.expiresAt) {
+      await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify({ ...session, used: true }));
+      throw new Error('El código ha expirado');
+    }
+
+    if (session.attempts >= RECOVERY_OTP_MAX_ATTEMPTS) {
+      await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify({ ...session, used: true }));
+      throw new Error('Código inválido');
+    }
+
+    const nextSession = { ...session, attempts: session.attempts + 1 };
+    if (!session.accountId || code !== session.code) {
+      await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify(nextSession));
+      throw new Error('Código inválido');
+    }
+
+    await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify({
+      ...nextSession,
+      verified: true,
+      code: null,
+    }));
+
+    return { success: true };
+  },
+
+  completeRecoveryLogin: async () => {
+    const session = await authService.getRecoverySession();
+    if (!session?.verified || session.used || !session.accountId) {
+      throw new Error('Verificacion requerida');
+    }
+
+    const accounts = await getAccounts();
+    const account = accounts.find(a => a.id === session.accountId);
+    if (!account) throw new Error('Verificacion requerida');
+
+    const fakeToken = `mock_recovery_${account.id}_${Date.now()}`;
+    const sessionUser = {
+      id: account.id,
+      email: account.email,
+      name: account.name,
+      role: account.role,
+      phone: account.phone || '',
+      twoFAEnabled: account.twoFAEnabled || false,
+      twoFAMethod: account.twoFAMethod || 'email'
+    };
+
+    await storage.setToken(fakeToken);
+    await storage.setUser(sessionUser);
+    await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify({ ...session, used: true }));
+
+    return { token: fakeToken, user: sessionUser };
+  },
+
+  resetRecoveredPassword: async (newPassword) => {
+    const session = await authService.getRecoverySession();
+    if (!session?.verified || session.used || !session.accountId) {
+      throw new Error('Verificacion requerida');
+    }
+
+    const accounts = await getAccounts();
+    const accountIndex = accounts.findIndex(a => a.id === session.accountId);
+    if (accountIndex === -1) throw new Error('Verificacion requerida');
+
+    accounts[accountIndex].password = newPassword;
+    await saveAccounts(accounts);
+    await AsyncStorage.setItem(RECOVERY_SESSION_KEY, JSON.stringify({ ...session, used: true }));
+
+    return true;
+  },
+
+  /**
    * Update Password: cambia la contraseña validando la actual
    */
   updatePassword: async (email, currentPassword, newPassword) => {
@@ -178,13 +368,46 @@ export const authService = {
   },
 
   /**
+   * Valida la contrase?a actual sin modificar la cuenta.
+   */
+  validatePassword: async (email, currentPassword) => {
+    const accounts = await getAccounts();
+    const normalizedEmail = email.trim().toLowerCase();
+    const account = accounts.find(a => a.email.toLowerCase() === normalizedEmail);
+
+    if (!account) throw new Error('Usuario no encontrado.');
+    if (account.password !== currentPassword) throw new Error('La contrase?a actual es incorrecta.');
+    return true;
+  },
+
+  /**
+   * Cambia el correo solo despu?s de validar la contrase?a actual.
+   */
+  updateEmail: async (email, currentPassword, newEmail) => {
+    const accounts = await getAccounts();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedNewEmail = newEmail.trim().toLowerCase();
+    const accountIndex = accounts.findIndex(a => a.email.toLowerCase() === normalizedEmail);
+
+    if (accountIndex === -1) throw new Error('Usuario no encontrado.');
+    if (accounts[accountIndex].password !== currentPassword) throw new Error('La contrase?a actual es incorrecta.');
+    if (accounts.some((item, index) => index !== accountIndex && item.email.toLowerCase() === normalizedNewEmail)) {
+      throw new Error('Ya existe una cuenta con ese correo electr?nico.');
+    }
+
+    accounts[accountIndex].email = normalizedNewEmail;
+    await saveAccounts(accounts);
+    return { ...accounts[accountIndex] };
+  },
+
+  /**
    * Update Profile: actualiza nombre y teléfono del usuario
    */
   updateProfile: async (email, newName, newPhone) => {
     const accounts = await getAccounts();
     const normalizedEmail = email.trim().toLowerCase();
     const accountIndex = accounts.findIndex(a => a.email.toLowerCase() === normalizedEmail);
-
+    
     if (accountIndex !== -1) {
       accounts[accountIndex].name = newName;
       accounts[accountIndex].phone = newPhone;
@@ -202,3 +425,4 @@ export const authService = {
     throw new Error('Refresh token no implementado aún');
   },
 };
+

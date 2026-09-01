@@ -66,14 +66,14 @@ export default function SafeMap({ children, currentLocation, initialRegion, styl
       <div id="map"></div>
       <script>
         try {
-          var map = L.map('map', {
+          var map = L.map('map', { 
             zoomControl: false,
             dragging: true,
             touchZoom: true,
             doubleClickZoom: true,
             boxZoom: true
           }).setView([${initialRegion?.latitude || 4.5709}, ${initialRegion?.longitude || -74.2973}], 16);
-
+          
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap'

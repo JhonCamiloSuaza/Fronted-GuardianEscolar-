@@ -4,8 +4,7 @@
  */
 export const COLORS = {
   // ────── PALETA PRINCIPAL (Basada en requerimientos nuevos) ──────
-  FONDO_PRINCIPAL:  '#F4F5F7',
-  FONDO_SECUNDARIO: '#EEF2F6',   // Gris claro neutro (60%) — fondo de pantallas
+  FONDO_PRINCIPAL:  '#F4F5F7',   // Gris claro neutro (60%) — fondo de pantallas
   PRIMARIO:         '#1A4F8A',   // Azul medianoche (30%) — marca y acciones principales
   ACENTO:           '#7BC74D',   // Verde lima suave (10%) — detalles y acentos
   
@@ -34,7 +33,6 @@ export const COLORS = {
   ADVERTENCIA:      '#F59E0B',
   ESTADO_OK:        '#7BC74D',   // Verde lima suave
   ESTADO_ALERTA:    '#E53935',
-  TRAYECTO_RECORRIDO: '#1A4F8A',
 
   // ────── RESERVADOS ──────
   BLANCO:           '#FFFFFF',
