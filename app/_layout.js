@@ -13,7 +13,7 @@ function RootLayoutNav() {
   const { isAuthenticated, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const { isDark, theme: themeData } = useTheme();
+  const { theme: themeData } = useTheme();
 
   useEffect(() => {
     if (loading) return;
@@ -22,12 +22,12 @@ function RootLayoutNav() {
     const inTabsGroup = segments[0] === '(tabs)';
     const isStudentDashboard = segments[0] === 'student-dashboard';
 
-    if (!isAuthenticated && !inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup && !isStudentDashboard) {
       router.replace('/(auth)/welcome');
     } else if (isAuthenticated && !inTabsGroup && !isStudentDashboard) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, loading, segments]);
+  }, [isAuthenticated, loading, router, segments]);
 
   if (loading) {
     return (

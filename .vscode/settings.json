@@ -3,5 +3,60 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "java.import.gradle.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.expo/**",
+    "**/.gradle/**",
+    "**/android/**",
+    "**/ios/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/web-build/**"
+  ],
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.expo": true,
+    "**/.gradle": true,
+    "**/android": true,
+    "**/ios": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/web-build": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.expo/**": true,
+    "**/.gradle/**": true,
+    "**/android/**": true,
+    "**/ios/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/web-build/**": true
+  },
+  "search.exclude": {
+    "**/node_modules/**": true,
+    "**/.expo/**": true,
+    "**/.gradle/**": true,
+    "**/android/**": true,
+    "**/ios/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/web-build/**": true
+  },
+  "java.autobuild.enabled": false,
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "java.import.gradle.wrapper.enabled": false,
+  "java.project.resourceFilters": [
+    "node_modules",
+    ".expo",
+    ".gradle",
+    "android",
+    "ios",
+    "build",
+    "dist",
+    "web-build"
+  ]
 }

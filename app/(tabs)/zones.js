@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, Surface, Avatar, Button, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,9 +11,34 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const isWeb = width > 768;
-const isTablet = width > 600 && width <= 1024;
 
 const EMPTY_ZONE = { name: '', type: 'Personalizado', address: '', radius: '100 Metros', color: COLORS.PRIMARIO };
+const VALID_ZONE_TYPES = ['Casa', 'Escuela', 'Personalizado'];
+
+function parseRadiusMeters(value = '') {
+  const digits = String(value).replace(/\D/g, '');
+  return digits ? Number(digits) : Number.NaN;
+}
+
+function normalizeZoneForm(zone) {
+  const radius = parseRadiusMeters(zone.radius);
+  return {
+    ...zone,
+    name: zone.name.trim(),
+    address: zone.address.trim(),
+    radius: `${radius} Metros`,
+    type: VALID_ZONE_TYPES.includes(zone.type) ? zone.type : 'Personalizado',
+  };
+}
+
+function normalizeRouteForm(route) {
+  return {
+    ...route,
+    name: route.name.trim(),
+    start: route.start.trim(),
+    end: route.end.trim(),
+  };
+}
 
 export default function ZonesScreen() {
   const router = useRouter();
@@ -43,13 +68,7 @@ export default function ZonesScreen() {
 
   const [loading, setLoading] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [])
-  );
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const data = await getStudents();
     setStudents(data);
     setSelectedStudent(prev => {
@@ -58,7 +77,17 @@ export default function ZonesScreen() {
       }
       return prev;
     });
-  }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData().catch((error) => {
+        setStudents([]);
+        setSelectedStudent(null);
+        Alert.alert(t('error'), error.message || 'No se pudieron cargar los estudiantes.');
+      });
+    }, [loadData, t])
+  );
 
   function openAddZone() {
     setEditingZone(null);
@@ -73,16 +102,30 @@ export default function ZonesScreen() {
   }
 
   async function handleSaveZone() {
+    const radius = parseRadiusMeters(form.radius);
     if (!form.name.trim() || !form.address.trim()) {
       Alert.alert(t('zonesRequiredFields'), t('zonesRequiredZoneMsg'));
       return;
     }
+    if (form.name.trim().length < 2 || form.name.trim().length > 100) {
+      Alert.alert(t('zonesRequiredFields'), 'El nombre de la zona debe tener entre 2 y 100 caracteres.');
+      return;
+    }
+    if (form.address.trim().length < 5 || form.address.trim().length > 160) {
+      Alert.alert(t('zonesRequiredFields'), 'La dirección debe tener entre 5 y 160 caracteres.');
+      return;
+    }
+    if (!Number.isInteger(radius) || radius < 10 || radius > 50000) {
+      Alert.alert(t('zonesRequiredFields'), 'El radio debe ser un numero entre 10 y 50000 metros.');
+      return;
+    }
+    const payload = normalizeZoneForm(form);
     setLoading(true);
     try {
       if (editingZone) {
-        await updateZone(selectedStudent.id, editingZone.id, form);
+        await updateZone(selectedStudent.id, editingZone.id, payload);
       } else {
-        await addZone(selectedStudent.id, form);
+        await addZone(selectedStudent.id, payload);
       }
       await loadData();
       setModalVisible(false);
@@ -137,12 +180,25 @@ export default function ZonesScreen() {
       Alert.alert(t('zonesRequiredFields'), t('zonesRequiredRouteMsg'));
       return;
     }
+    if (routeForm.name.trim().length < 2 || routeForm.name.trim().length > 100) {
+      Alert.alert(t('zonesRequiredFields'), 'El nombre de la ruta debe tener entre 2 y 100 caracteres.');
+      return;
+    }
+    if (routeForm.start.trim().length < 3 || routeForm.start.trim().length > 160) {
+      Alert.alert(t('zonesRequiredFields'), 'El punto inicial debe tener entre 3 y 160 caracteres.');
+      return;
+    }
+    if (routeForm.end.trim().length < 3 || routeForm.end.trim().length > 160) {
+      Alert.alert(t('zonesRequiredFields'), 'El punto final debe tener entre 3 y 160 caracteres.');
+      return;
+    }
+    const payload = normalizeRouteForm(routeForm);
     setLoading(true);
     try {
       if (editingRoute) {
-        await updateRoute(selectedStudent.id, editingRoute.id, routeForm);
+        await updateRoute(selectedStudent.id, editingRoute.id, payload);
       } else {
-        await addRoute(selectedStudent.id, routeForm);
+        await addRoute(selectedStudent.id, payload);
       }
       await loadData();
       setModalRouteVisible(false);
@@ -399,7 +455,17 @@ export default function ZonesScreen() {
                 
                 <View style={styles.formRow}>
                   <View style={styles.formHalf}>
-                    <ZField label="Radio de alerta" value={form.radius} onChange={v => setForm(f => ({ ...f, radius: v }))} placeholder="Ej: 100 Metros" color={form.color} />
+                    <ZField
+                      label="Radio de alerta"
+                      value={form.radius}
+                      onChange={v => {
+                        const digits = v.replace(/\D/g, '').slice(0, 5);
+                        setForm(f => ({ ...f, radius: digits ? `${digits} Metros` : '' }));
+                      }}
+                      placeholder="Ej: 100 Metros"
+                      color={form.color}
+                      keyboardType="number-pad"
+                    />
                   </View>
                   <View style={styles.formHalf}>
                     <View style={styles.typeSelector}>
@@ -536,7 +602,7 @@ export default function ZonesScreen() {
   );
 }
 
-function ZField({ label, value, onChange, placeholder, color }) {
+function ZField({ label, value, onChange, placeholder, color, keyboardType = 'default' }) {
   const { theme } = useTheme();
   const colors = theme.colors;
 
@@ -551,6 +617,7 @@ function ZField({ label, value, onChange, placeholder, color }) {
         ]} 
         value={value} 
         onChangeText={onChange} 
+        keyboardType={keyboardType}
         placeholder={placeholder} 
         placeholderTextColor={colors.textMuted}
       />
@@ -620,7 +687,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: isWeb ? 24 : 10, paddingVertical: 18 },
   modalKAV: { width: '100%', alignItems: 'center', justifyContent: 'center' },
   modalContent: { backgroundColor: COLORS.BLANCO, borderRadius: 12, padding: 20, maxHeight: '90%' },
-  modalSheet: { backgroundColor: COLORS.BLANCO, borderRadius: 12, width: isWeb ? (isTablet ? '85%' : '82%') : '95%', maxWidth: 820, maxHeight: '86%', overflow: 'hidden' },
+  modalSheet: { backgroundColor: COLORS.BLANCO, borderRadius: 12, width: isWeb ? '90%' : '96%', maxWidth: 1020, maxHeight: '92%', overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.NEGRO },
   inputBox: { marginBottom: 16 },

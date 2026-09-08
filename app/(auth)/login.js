@@ -1,22 +1,20 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Checkbox, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { authService } from '../../services/auth.service';
-
-const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+import { storage } from '../../utils/storage';
+import { isValidEmail } from '../../utils/validators';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { login, setAuthState } = useAuth();
+  const { login } = useAuth();
   const { t } = useLanguage();
   const { theme } = useTheme();
   const colors = theme.colors;
@@ -27,10 +25,43 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [secureText, setSecureText] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
-  const [show2FA, setShow2FA] = useState(false);
-  const [twoFACode, setTwoFACode] = useState('');
-  const [twoFAMethod, setTwoFAMethod] = useState('email');
-  const [targetEmail, setTargetEmail] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadRememberedEmail = async () => {
+      const rememberedEmail = await storage.getRememberedEmail();
+      if (isMounted && rememberedEmail) {
+        setEmail(rememberedEmail);
+        setRememberMe(true);
+      }
+    };
+
+    loadRememberedEmail();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (document.getElementById('guardian-hide-native-password-toggle')) return;
+
+    const style = document.createElement('style');
+    style.id = 'guardian-hide-native-password-toggle';
+    style.textContent = `
+      input[type="password"]::-ms-reveal,
+      input[type="password"]::-ms-clear {
+        display: none;
+      }
+      input[type="password"]::-webkit-credentials-auto-fill-button {
+        visibility: hidden;
+        display: none;
+        pointer-events: none;
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
 
   const handleLogin = async () => {
     setErrorMsg('');
@@ -45,11 +76,23 @@ export default function LoginScreen() {
 
     try {
       setIsSubmitting(true);
-      const result = await login(email.trim(), password);
+      const normalizedEmail = email.trim().toLowerCase();
+      const result = await login(normalizedEmail, password);
+      if (rememberMe) {
+        await storage.setRememberedEmail(normalizedEmail);
+      } else {
+        await storage.removeRememberedEmail();
+      }
       if (result?.requires2FA) {
-        setTargetEmail(result.email);
-        setTwoFAMethod(result.method);
-        setShow2FA(true);
+        router.push({
+          pathname: '/(auth)/verify-code',
+          params: {
+            token: result.twoFAToken,
+            method: result.twoFAMethod,
+            email: normalizedEmail,
+            mode: 'login',
+          },
+        });
       }
     } catch (error) {
       setErrorMsg(error.message || t('authInvalidCredentials'));
@@ -58,21 +101,11 @@ export default function LoginScreen() {
     }
   };
 
-  const handle2FAVerify = async () => {
-    setErrorMsg('');
-    if (twoFACode !== '847291') {
-      setErrorMsg(t('authWrongCode'));
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const session = await authService.complete2FALogin(targetEmail);
-      setAuthState(session);
-    } catch (error) {
-      setErrorMsg(t('authSessionFinishError'));
-    } finally {
-      setIsSubmitting(false);
+  const handleRememberToggle = async () => {
+    const nextValue = !rememberMe;
+    setRememberMe(nextValue);
+    if (!nextValue) {
+      await storage.removeRememberedEmail();
     }
   };
 
@@ -91,8 +124,7 @@ export default function LoginScreen() {
             <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('appName')}</Text>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {!show2FA ? (
-                <>
+              <>
                   <Text style={[styles.cardTitle, { color: colors.text }]}>{t('authLogin')}</Text>
                   <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>{t('authEnterEmail')}</Text>
 
@@ -132,8 +164,10 @@ export default function LoginScreen() {
 
                   <View style={styles.rememberRecoveryRow}>
                     <View style={styles.checkboxContainer}>
-                      <Checkbox status={rememberMe ? 'checked' : 'unchecked'} onPress={() => setRememberMe(!rememberMe)} color={colors.primary} />
-                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>{t('authRemember')}</Text>
+                      <Checkbox status={rememberMe ? 'checked' : 'unchecked'} onPress={handleRememberToggle} color={colors.primary} />
+                      <TouchableOpacity onPress={handleRememberToggle}>
+                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>{t('authRemember')}</Text>
+                      </TouchableOpacity>
                     </View>
                     <TouchableOpacity
                       style={styles.forgotLink}
@@ -162,81 +196,14 @@ export default function LoginScreen() {
                   >
                     {t('authLoginBtn')}
                   </Button>
-                </>
-              ) : (
-                <View>
-                  <TouchableOpacity onPress={() => setShow2FA(false)} style={styles.backBtn}>
-                    <MaterialCommunityIcons name="arrow-left" size={20} color={colors.primary} />
-                    <Text style={[styles.backBtnText, { color: colors.primary }]}>{t('authBack')}</Text>
-                  </TouchableOpacity>
+              </>
 
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>{t('authVerification')}</Text>
-                  <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
-                    {`${t('authCodeSent')} ${twoFAMethod === 'email' ? t('authEmail').toLowerCase() : t('profilePhone').toLowerCase()}.`}
-                  </Text>
-
-                  <View style={styles.otpInfoBox}>
-                    <MaterialCommunityIcons name="shield-key-outline" size={40} color={colors.primary} />
-                    <Text style={[styles.otpHint, { color: colors.text }]}>{t('authEnterCode')}</Text>
-                    <Text style={[styles.demoHint, { color: colors.accent }]}>({t('authDemoCode')})</Text>
-                  </View>
-
-                  <TextInput
-                    mode="outlined"
-                    value={twoFACode}
-                    onChangeText={setTwoFACode}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    style={[styles.otpInput, { backgroundColor: colors.surfaceSecondary }]}
-                    outlineColor={colors.border}
-                    activeOutlineColor={colors.primary}
-                    textColor={colors.text}
-                    placeholder="000000"
-                  />
-
-                  {errorMsg ? (
-                    <View style={[styles.errorBox, { backgroundColor: colors.errorLight, borderColor: colors.error }]}>
-                      <Text style={[styles.errorBoxText, { color: colors.error }]}>{errorMsg}</Text>
-                    </View>
-                  ) : null}
-
-                  <Button
-                    mode="contained"
-                    onPress={handle2FAVerify}
-                    loading={isSubmitting}
-                    disabled={isSubmitting || twoFACode.length < 6}
-                    style={styles.loginButton}
-                    contentStyle={styles.buttonContent}
-                    buttonColor={colors.primary}
-                    textColor={colors.textOnPrimary}
-                  >
-                    {t('authVerifyCode')}
-                  </Button>
-                </View>
-              )}
-
-              {!show2FA && (
-                <View style={styles.footerLinks}>
-                  <Text style={[styles.noAccountText, { color: colors.text }]}>{t('authNoAccount')} </Text>
-                  <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-                    <Text style={[styles.registerLink, { color: colors.primary }]}>{t('authRegisterBtn')}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={styles.devClear}
-                onPress={async () => {
-                  await AsyncStorage.clear();
-                  if (Platform.OS === 'web') {
-                    window.alert(t('devDataClearedWeb'));
-                  } else {
-                    Alert.alert(t('devDataClearedTitle'), t('devDataClearedMessage'));
-                  }
-                }}
-              >
-                <Text style={[styles.devClearText, { color: colors.error }]}>{t('devClearData')}</Text>
-              </TouchableOpacity>
+              <View style={styles.footerLinks}>
+                <Text style={[styles.noAccountText, { color: colors.text }]}>{t('authNoAccount')} </Text>
+                <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+                  <Text style={[styles.registerLink, { color: colors.primary }]}>{t('authRegisterBtn')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>

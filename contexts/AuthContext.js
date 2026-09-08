@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 
 import { authService } from '../services/auth.service';
+import { notificationService } from '../services/notification.service';
+import { subscribeAuthExpired } from '../utils/authEvents';
 import { storage } from '../utils/storage';
 
 const AuthContext = createContext();
@@ -19,12 +21,17 @@ export const AuthProvider = ({ children }) => {
         const savedUser = await storage.getUser();
 
         if (savedToken && savedUser) {
+          const currentUser = await authService.getCurrentUser();
           setToken(savedToken);
-          setUser(savedUser);
+          setUser(currentUser || savedUser);
           setIsAuthenticated(true);
         }
       } catch (error) {
-        console.error('Error cargando auth:', error);
+        await storage.clearAll();
+        setToken(null);
+        setUser(null);
+        setIsAuthenticated(false);
+        console.warn('Sesion local descartada:', error?.message || error);
       } finally {
         setLoading(false);
       }
@@ -33,15 +40,26 @@ export const AuthProvider = ({ children }) => {
     bootstrapAuth();
   }, []);
 
+  useEffect(() => {
+    return subscribeAuthExpired(() => {
+      setToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+    });
+  }, []);
+
   const login = async (email, password) => {
     const result = await authService.login(email, password);
     if (result.requires2FA) {
-      return result; // Retornamos para que el login.js lo maneje
+      return result;
     }
     const { token: newToken, user: newUser } = result;
     setToken(newToken);
     setUser(newUser);
     setIsAuthenticated(true);
+    notificationService.registerPushDevice().catch((error) => {
+      console.warn('No se pudo registrar el dispositivo para push:', error?.message || error);
+    });
     return result;
   };
 
@@ -89,3 +107,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export const useAuthContext = useAuth;

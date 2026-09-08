@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+.git
+.gitignore
+*.log
+*.err
+package.json.backup
+DOCUMENTACION_MARKDOWN
+
