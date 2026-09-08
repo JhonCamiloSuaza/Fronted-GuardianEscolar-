@@ -1,61 +1,181 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Dimensions, Platform, StatusBar } from 'react-native';
+import { Alert, Linking, Platform, View, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text, Surface, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { studentService } from '../services/student.service';
+import { BASE_URL } from '../config/endpoints';
 
-const { width } = Dimensions.get('window');
-const isWeb = width > 768;
+const DEVICE_ID_KEY = '@guardian_student_device_id';
+
+const GRADE_LABELS = {
+  PRE_KINDER: 'Pre Kinder',
+  KINDER: 'Kinder',
+  TRANSITION: 'Transicion',
+  FIRST: 'Primero',
+  SECOND: 'Segundo',
+  THIRD: 'Tercero',
+  FOURTH: 'Cuarto',
+  FIFTH: 'Quinto',
+  SIXTH: 'Sexto',
+  SEVENTH: 'Septimo',
+  EIGHTH: 'Octavo',
+  NINTH: 'Noveno',
+  TENTH: 'Decimo',
+  ELEVENTH: 'Undecimo',
+};
+
+async function getStudentDeviceId() {
+  const current = await AsyncStorage.getItem(DEVICE_ID_KEY);
+  if (current) return current;
+  const randomId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const next = `student-device-${randomId}`;
+  await AsyncStorage.setItem(DEVICE_ID_KEY, next);
+  return next;
+}
+
+function platformName() {
+  if (Platform.OS === 'ios') return 'IOS';
+  if (Platform.OS === 'android') return 'ANDROID';
+  return 'WEB';
+}
+
+function calculateAge(birthDate) {
+  if (!birthDate) return '';
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return '';
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDelta = today.getMonth() - birth.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birth.getDate())) age -= 1;
+  return age > 0 ? String(age) : '';
+}
 
 export default function StudentDashboardScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const [studentProfile, setStudentProfile] = React.useState(null);
   
   // Datos del estudiante
-  const studentName = params.nombre || 'Estudiante Demo';
-  const studentAge = params.edad || 'No especificada';
-  const studentGrade = params.grado || 'No especificado';
-  const studentSchool = params.colegio || 'No especificada';
-  const studentId = params.id || 'EST-000-0000';
+  const studentName = studentProfile?.fullName || studentProfile?.nombreCompleto || params.nombre || 'Estudiante';
+  const studentAge = calculateAge(studentProfile?.birthDate || studentProfile?.fechaNacimiento) || params.edad || 'No especificada';
+  const studentGrade = GRADE_LABELS[studentProfile?.schoolGrade || studentProfile?.gradoEscolar] || params.grado || 'No especificado';
+  const studentId = params.id || 'No asignado';
+  const studentCode = params.codigo || 'No asignado';
+  const [linkStatus, setLinkStatus] = React.useState('idle');
+  const [linkedCount, setLinkedCount] = React.useState(null);
+  const [linkError, setLinkError] = React.useState('');
 
-  // Datos del contacto de emergencia (Acudiente logueado)
-  const parentName = user?.name || 'Acudiente Demo';
-  const parentPhone = user?.phone || '+57 300 000 0000';
+  // Datos del contacto de emergencia enviados por el QR.
+  const parentName = studentProfile?.contactName || studentProfile?.contactoNombre || params.contacto || user?.name || 'No registrado';
+  const parentPhone = studentProfile?.contactPhone || studentProfile?.contactoTelefono || params.telefono || user?.phone || '';
+
+  React.useEffect(() => {
+    let mounted = true;
+    const connectStudent = async () => {
+      try {
+        if (!params.id || !params.codigo) {
+          throw new Error('El QR no incluye datos de vinculacion completos.');
+        }
+        const profile = await studentService.linkedProfile(String(params.id), String(params.codigo));
+        if (mounted) {
+          setStudentProfile(profile);
+        }
+        const deviceIdentifier = await getStudentDeviceId();
+        const response = await studentService.linkDevice({
+          studentId: String(params.id),
+          code: String(params.codigo),
+          deviceIdentifier,
+          platform: platformName(),
+          deviceName: Platform.OS === 'web' ? 'Navegador del estudiante' : 'Celular del estudiante',
+        });
+        if (!mounted) return;
+        setLinkedCount(response.linkedDevices);
+        setLinkStatus('linked');
+      } catch (error) {
+        if (!mounted) return;
+        setLinkError(error.message || 'No se pudo conectar con el backend.');
+        setLinkStatus('error');
+      }
+    };
+
+    connectStudent();
+    return () => {
+      mounted = false;
+    };
+  }, [params.codigo, params.id]);
+
+  const callEmergencyContact = async () => {
+    const phoneDigits = String(parentPhone).replace(/[^\d+]/g, '');
+    if (!phoneDigits || phoneDigits === 'No registrado') {
+      Alert.alert('Contacto no disponible', 'Este QR no tiene un teléfono de emergencia válido.');
+      return;
+    }
+
+    const phoneUrl = `tel:${phoneDigits}`;
+    const supported = await Linking.canOpenURL(phoneUrl);
+    if (!supported) {
+      Alert.alert('No se puede llamar', 'Este dispositivo no permite abrir llamadas telefonicas.');
+      return;
+    }
+    await Linking.openURL(phoneUrl);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>GPS Guardian Escolar</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
-          
-          {/* Card 1: Estado de Rastreo */}
-          <Surface style={[styles.card, styles.statusCard]} elevation={2}>
-            <View style={styles.statusIconWrap}>
-              <MaterialCommunityIcons name="magnify" size={24} color="#FFF" />
-            </View>
-            <View style={styles.statusTextWrap}>
-              <Text style={styles.statusTitle}>Rastreo activado correctamente</Text>
-              <Text style={styles.statusSubtitle}>La Aplicación funciona en segundo plano</Text>
-            </View>
-          </Surface>
+          {linkStatus !== 'idle' && (
+            <Surface
+              style={[
+                styles.connectionCard,
+                linkStatus === 'linked' ? styles.connectionCardOk : styles.connectionCardError,
+              ]}
+              elevation={1}
+            >
+              <MaterialCommunityIcons
+                name={linkStatus === 'linked' ? 'check-circle' : 'alert-circle'}
+                size={22}
+                color={linkStatus === 'linked' ? '#166534' : '#B91C1C'}
+              />
+              <View style={styles.connectionTextWrap}>
+                <Text
+                  style={[
+                    styles.connectionTitle,
+                    { color: linkStatus === 'linked' ? '#166534' : '#B91C1C' },
+                  ]}
+                >
+                  {linkStatus === 'linked' ? 'Celular conectado al estudiante' : 'No se pudo conectar este celular'}
+                </Text>
+                <Text style={styles.connectionSubtitle}>
+                  {linkStatus === 'linked'
+                    ? `Este celular ya puede enviar ubicación. Dispositivos vinculados: ${linkedCount ?? 1}.`
+                    : linkError || 'Verifica que el QR sea válido o vuelve a escanearlo.'}
+                </Text>
+                {linkStatus === 'error' && (
+                  <Text style={styles.connectionDebug} numberOfLines={1}>
+                    API: {BASE_URL}
+                  </Text>
+                )}
+              </View>
+            </Surface>
+          )}
 
-          {/* Card 2: Mi Información */}
+          {/* Card 1: Mi Información */}
           <Surface style={styles.card} elevation={2}>
             <View style={styles.cardHeader}>
               <MaterialCommunityIcons name="account" size={24} color={COLORS.PRIMARIO} />
-              <Text style={styles.cardTitle}>Mi informacion</Text>
+              <Text style={styles.cardTitle}>Mi información</Text>
             </View>
 
             <View style={styles.infoRow}>
@@ -76,19 +196,13 @@ export default function StudentDashboardScreen() {
               </View>
             </View>
 
-            <View style={styles.infoRow}>
-              <View style={styles.infoColFull}>
-                <Text style={styles.label}>Escuela</Text>
-                <Text style={styles.value}>{studentSchool}</Text>
-              </View>
-            </View>
-
             <View style={styles.idBox}>
               <Text style={styles.idText}>ID Estudiante: {studentId}</Text>
+              <Text style={styles.idText}>Código QR: {studentCode}</Text>
             </View>
           </Surface>
 
-          {/* Card 3: Contacto de Emergencia */}
+          {/* Card 2: Contacto de Emergencia */}
           <Surface style={styles.card} elevation={2}>
             <View style={styles.cardHeader}>
               <MaterialCommunityIcons name="phone" size={24} color={COLORS.TEXTO_SECUNDARIO} />
@@ -114,13 +228,14 @@ export default function StudentDashboardScreen() {
               buttonColor="#E11D48" 
               textColor="#FFF"
               style={styles.emergencyBtn}
-              onPress={() => {}}
+              disabled={!parentPhone}
+              onPress={callEmergencyContact}
             >
-              Llama de Emergencia
+              Llamar Emergencia
             </Button>
           </Surface>
 
-          {/* Card 4: ¿Como funciona el rastreo? */}
+          {/* Card 3: ¿Como funciona el rastreo? */}
           <Surface style={styles.card} elevation={2}>
             <View style={styles.cardHeader}>
               <MaterialCommunityIcons name="target" size={24} color="#E11D48" />
@@ -163,11 +278,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  backButton: {
-    position: 'absolute',
-    left: 16,
-    padding: 8,
-  },
   headerTitle: {
     color: '#FFF',
     fontSize: 20,
@@ -190,32 +300,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  statusCard: {
+  connectionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    gap: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
   },
-  statusIconWrap: {
-    backgroundColor: '#65A30D',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+  connectionCardOk: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
   },
-  statusTextWrap: {
+  connectionCardError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  connectionTextWrap: {
     flex: 1,
   },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  statusSubtitle: {
+  connectionTitle: {
     fontSize: 13,
-    color: '#6B7280',
+    fontWeight: '800',
+  },
+  connectionSubtitle: {
+    color: '#4B5563',
+    fontSize: 12,
     marginTop: 2,
+  },
+  connectionDebug: {
+    color: '#6B7280',
+    fontSize: 10,
+    marginTop: 4,
   },
   cardHeader: {
     flexDirection: 'row',

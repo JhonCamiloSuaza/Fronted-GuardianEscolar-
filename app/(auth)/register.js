@@ -1,22 +1,53 @@
-﻿import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Dimensions, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Checkbox, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { authService } from '../../services/auth.service';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { isValidEmail, normalizePhoneDigits, passwordChecks } from '../../utils/validators';
 
 const isWeb = Dimensions.get('window').width > 768;
 
-const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
-const hasUpperCase = (v) => /[A-Z]/.test(v);
-const hasLowerCase = (v) => /[a-z]/.test(v);
-const hasNumber = (v) => /[0-9]/.test(v);
-const hasSpecial = (v) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
-const hasMinLength = (v) => v.length >= 8;
+const TERMS_VERSION = '2026-08-20';
+const TERMS_SECTIONS = [
+  {
+    title: '1. Objeto del servicio',
+    body: 'Guardian Escolar es una herramienta académica para apoyar el seguimiento de estudiantes, la administración de acudientes, rutas, zonas seguras, alertas y datos de contacto de emergencia. El servicio no reemplaza la supervisión responsable de padres, acudientes o instituciones educativas.',
+  },
+  {
+    title: '2. Uso de ubicación',
+    body: 'Al usar funciones de rastreo, el acudiente autoriza el tratamiento de datos de ubicación del dispositivo vinculado al estudiante. Estos datos se usan para mostrar recorridos, detectar salidas de zonas seguras, posibles desvíos de ruta e inactividad durante trayectos.',
+  },
+  {
+    title: '3. Responsabilidad del acudiente',
+    body: 'El usuario debe registrar información real, mantener segura su cuenta, verificar que el dispositivo del estudiante tenga permisos de ubicación activos y compartir acceso solo con personas autorizadas para consultar o acompañar al estudiante.',
+  },
+  {
+    title: '4. Privacidad y datos personales',
+    body: 'Se tratan datos como nombre, correo, teléfono, información del estudiante, contactos de emergencia, configuración de notificaciones, rutas, zonas seguras y ubicaciones reportadas. La información se usa para operar el sistema y no debe compartirse con terceros no autorizados.',
+  },
+  {
+    title: '5. Notificaciones',
+    body: 'El sistema puede enviar correos, alertas push o SMS cuando estas opciones estén habilitadas. La entrega puede depender de servicios externos, conexión a internet, permisos del dispositivo y disponibilidad del proveedor.',
+  },
+  {
+    title: '6. Seguridad de la cuenta',
+    body: 'El usuario es responsable de proteger su contraseña y cerrar sesión en dispositivos compartidos. Guardian Escolar puede bloquear acciones o solicitar verificación de correo para reducir accesos no autorizados.',
+  },
+  {
+    title: '7. Limitaciones',
+    body: 'La precisión de la ubicación puede variar por GPS, red móvil, Wi-Fi, batería, permisos del sistema operativo o condiciones del entorno. Las alertas son apoyo preventivo y pueden tener retrasos.',
+  },
+  {
+    title: '8. Aceptación',
+    body: `Al crear la cuenta, el usuario declara que leyó y acepta estos Términos y Condiciones y la Política de Privacidad de Guardian Escolar. Versión ${TERMS_VERSION}.`,
+  },
+];
 
 // CheckItem sin gap, sin whitespace entre nodos
 const CheckItem = ({ ok, label, colors }) => (
@@ -25,6 +56,41 @@ const CheckItem = ({ ok, label, colors }) => (
     <Text style={[styles.checkLabel, { color: ok ? colors.success : colors.textSecondary }]}>{label}</Text>
   </View>
 );
+
+const FieldSvgIcon = ({ type, color, size = 22 }) => {
+  const common = { stroke: color, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' };
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {type === 'name' ? (
+        <>
+          <Circle cx="12" cy="8" r="4" {...common} />
+          <Path d="M4.5 20c1.5-4 4-6 7.5-6s6 2 7.5 6" {...common} />
+        </>
+      ) : null}
+      {type === 'phone' ? (
+        <Path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3 15h4M9 6h6" {...common} />
+      ) : null}
+      {type === 'email' ? (
+        <>
+          <Rect x="3" y="5" width="18" height="14" rx="2" {...common} />
+          <Path d="m4 7 8 6 8-6" {...common} />
+        </>
+      ) : null}
+      {type === 'lock' ? (
+        <>
+          <Rect x="5" y="10" width="14" height="10" rx="2" {...common} />
+          <Path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" {...common} />
+        </>
+      ) : null}
+      {type === 'lockCheck' ? (
+        <>
+          <Rect x="4" y="10" width="16" height="10" rx="2" {...common} />
+          <Path d="M8 10V7a4 4 0 0 1 8 0v3M9 15l2 2 4-5" {...common} />
+        </>
+      ) : null}
+    </Svg>
+  );
+};
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -46,19 +112,12 @@ export default function RegisterScreen() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const reqs = {
-    minLen: hasMinLength(password),
-    upper: hasUpperCase(password),
-    lower: hasLowerCase(password),
-    number: hasNumber(password),
-    special: hasSpecial(password),
-    match: password.length > 0 && password === confirmPassword,
-  };
+  const reqs = passwordChecks(password, confirmPassword);
   const allReqsMet = Object.values(reqs).every(Boolean);
-  const phoneDigits = phone.replace(/\D/g, '');
+  const phoneDigits = normalizePhoneDigits(phone);
   const isValidPhone = phoneDigits.length >= 10 && phoneDigits.length <= 15;
 
-  // Booleans explÃ­citos para evitar string vacÃ­o en render
+  // Booleans explícitos para evitar string vacío en render
   const showEmailError = email.length > 0 && !isValidEmail(email);
   const showPassBox = showPassReqs || password.length > 0;
   const showMatchStatus = confirmPassword.length > 0;
@@ -66,15 +125,15 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     setErrorMsg('');
 
-    if (!name.trim()) { setErrorMsg('El nombre es obligatorio.'); return; }
+    if (name.trim().length < 2 || name.trim().length > 100) { setErrorMsg('El nombre debe tener entre 2 y 100 caracteres.'); return; }
     if (!isValidPhone) { setErrorMsg('Ingresa un teléfono válido, solo números.'); return; }
-    if (!isValidEmail(email)) { setErrorMsg('Ingresa un correo válido (ej: usuario@gmail.com).'); return; }
+    if (!isValidEmail(email)) { setErrorMsg('Ingresa un correo real con dominio válido (ej: usuario@gmail.com).'); return; }
     if (!allReqsMet) { setErrorMsg(t('authPasswordRulesFailed')); return; }
     if (!acceptTerms) { setTermsModalVisible(true); return; }
 
     setIsSubmitting(true);
     try {
-      await authService.register({ name, email: email.trim(), password, phone: phone.trim() });
+      await authService.register({ name: name.trim(), email: email.trim(), password, phone: phone.trim(), acceptedTerms: true, termsVersion: TERMS_VERSION });
       Alert.alert(t('success'), 'Cuenta creada. Ya puedes iniciar sesión.');
       router.replace('/(auth)/login');
     } catch (error) {
@@ -101,7 +160,7 @@ export default function RegisterScreen() {
               <Text style={[styles.cardTitle, { color: colors.text }]}>{t('authRegister')}</Text>
               <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>{t('authEnterEmail')}</Text>
 
-              {/* â”€â”€ Nombre â”€â”€ */}
+              {/* Nombre */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.text }]}>{t('authGuardianName')}</Text>
                 <TextInput
@@ -109,30 +168,30 @@ export default function RegisterScreen() {
                   outlineColor={colors.border} activeOutlineColor={colors.primary}
                   style={[styles.input, { backgroundColor: colors.surfaceSecondary }]} textColor={colors.text} theme={{ roundness: 6 }}
                   placeholderTextColor={colors.textMuted}
-                  left={<TextInput.Icon icon="account-outline" color={colors.textSecondary} />}
+                  left={<TextInput.Icon icon={({ size, color }) => <FieldSvgIcon type="name" size={size} color={color} />} color={colors.textSecondary} />}
                 />
               </View>
 
-              {/* â”€â”€ TelÃ©fono â”€â”€ */}
+              {/* Teléfono */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.text }]}>{t('profilePhone')}</Text>
                 <TextInput
                   mode="outlined" value={phone}
                   onChangeText={(v) => {
-                    const digits = v.replace(/\D/g, '').slice(0, 13);
+                    const digits = normalizePhoneDigits(v, 13);
                     const withoutCountry = digits.startsWith('57') ? digits.slice(2) : digits;
                     setPhone(`+57 ${withoutCountry}`);
                   }}
                   keyboardType="phone-pad"
                   outlineColor={phone.length > 4 && !isValidPhone ? colors.error : colors.border} activeOutlineColor={colors.primary}
                   style={[styles.input, { backgroundColor: colors.surfaceSecondary }]} textColor={colors.text} theme={{ roundness: 6 }}
-                  left={<TextInput.Icon icon="phone-outline" color={colors.textSecondary} />}
+                  left={<TextInput.Icon icon={({ size, color }) => <FieldSvgIcon type="phone" size={size} color={color} />} color={colors.textSecondary} />}
                   placeholder="+57 300 123 4567"
                   placeholderTextColor={colors.textMuted}
                 />
               </View>
 
-              {/* â”€â”€ Correo â”€â”€ */}
+              {/* Correo */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.text }]}>{t('authEmail')}</Text>
                 <TextInput
@@ -142,7 +201,7 @@ export default function RegisterScreen() {
                   activeOutlineColor={colors.primary}
                   style={[styles.input, { backgroundColor: colors.surfaceSecondary }]} textColor={colors.text} theme={{ roundness: 6 }}
                   placeholderTextColor={colors.textMuted}
-                  left={<TextInput.Icon icon="email-outline" color={colors.textSecondary} />}
+                  left={<TextInput.Icon icon={({ size, color }) => <FieldSvgIcon type="email" size={size} color={color} />} color={colors.textSecondary} />}
                   right={
                     email.length > 0
                       ? <TextInput.Icon icon={isValidEmail(email) ? 'check-circle' : 'alert-circle'} color={isValidEmail(email) ? colors.success : colors.error} />
@@ -150,11 +209,11 @@ export default function RegisterScreen() {
                   }
                 />
                 {showEmailError ? (
-                  <Text style={[styles.errorHint, { color: colors.error }]}>Formato inválido. Ej: usuario@gmail.com</Text>
+                  <Text style={[styles.errorHint, { color: colors.error }]}>Correo inválido o dominio no permitido. Ej: usuario@gmail.com</Text>
                 ) : null}
               </View>
 
-              {/* â”€â”€ ContraseÃ±a â”€â”€ */}
+              {/* Contraseña */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.text }]}>{t('authPassword')}</Text>
                 <TextInput
@@ -165,7 +224,7 @@ export default function RegisterScreen() {
                   activeOutlineColor={colors.primary}
                   style={[styles.input, { backgroundColor: colors.surfaceSecondary }]} textColor={colors.text} theme={{ roundness: 6 }}
                   placeholderTextColor={colors.textMuted}
-                  left={<TextInput.Icon icon="lock-outline" color={colors.textSecondary} />}
+                  left={<TextInput.Icon icon={({ size, color }) => <FieldSvgIcon type="lock" size={size} color={color} />} color={colors.textSecondary} />}
                   right={<TextInput.Icon icon={secureText ? 'eye' : 'eye-off'} onPress={() => setSecureText(!secureText)} color={colors.primary} />}
                 />
                 {showPassBox ? (
@@ -180,7 +239,7 @@ export default function RegisterScreen() {
                 ) : null}
               </View>
 
-              {/* â”€â”€ Confirmar ContraseÃ±a â”€â”€ */}
+              {/* Confirmar contraseña */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.text }]}>{t('authConfirmPass')}</Text>
                 <TextInput
@@ -190,7 +249,7 @@ export default function RegisterScreen() {
                   activeOutlineColor={colors.primary}
                   style={[styles.input, { backgroundColor: colors.surfaceSecondary }]} textColor={colors.text} theme={{ roundness: 6 }}
                   placeholderTextColor={colors.textMuted}
-                  left={<TextInput.Icon icon="lock-check-outline" color={colors.textSecondary} />}
+                  left={<TextInput.Icon icon={({ size, color }) => <FieldSvgIcon type="lockCheck" size={size} color={color} />} color={colors.textSecondary} />}
                   right={<TextInput.Icon icon={secureConfirm ? 'eye' : 'eye-off'} onPress={() => setSecureConfirm(!secureConfirm)} color={colors.primary} />}
                 />
                 {showMatchStatus ? (
@@ -201,7 +260,7 @@ export default function RegisterScreen() {
                 ) : null}
               </View>
 
-              {/* â”€â”€ TÃ©rminos â”€â”€ */}
+              {/* Términos */}
               <TouchableOpacity style={styles.termsRow} onPress={() => { if (acceptTerms) { setAcceptTerms(false); } else { setTermsModalVisible(true); } setErrorMsg(''); }} activeOpacity={0.7}>
                 <View style={styles.checkboxWrapper}>
                   <Checkbox status={acceptTerms ? 'checked' : 'unchecked'} color={colors.primary} />
@@ -232,7 +291,7 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <Modal visible={termsModalVisible} transparent animationType="fade" onRequestClose={() => { setTermsModalVisible(false); setAcceptTerms(false); router.back(); }}>
+      <Modal visible={termsModalVisible} transparent animationType="fade" onRequestClose={() => { setTermsModalVisible(false); setAcceptTerms(false); }}>
         <View style={[styles.termsOverlay, { backgroundColor: colors.overlay }]}>
           <View style={[styles.termsModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.termsHeader, { borderBottomColor: colors.border }]}>
@@ -242,7 +301,6 @@ export default function RegisterScreen() {
                 onPress={() => {
                   setTermsModalVisible(false);
                   setAcceptTerms(false);
-                  router.back();
                 }}
               >
                 <MaterialCommunityIcons name="close" size={22} color={colors.textSecondary} />
@@ -256,14 +314,15 @@ export default function RegisterScreen() {
               }}
               scrollEventThrottle={16}
             >
-              <Text style={[styles.termsBody, { color: colors.text }]}>
-                ESPACIO RESERVADO PARA LOS TERMINOS Y CONDICIONES OFICIALES.
+              <Text style={[styles.termsIntro, { color: colors.textSecondary }]}>
+                Lee el documento completo antes de aceptar. Esta aceptación quedará asociada a tu cuenta.
               </Text>
-              <Text style={[styles.termsBody, { color: colors.textSecondary }]}>
-                Aqui se insertara posteriormente el contenido legal oficial de Guardian Escolar. El usuario debe desplazarse hasta el final de esta area antes de aceptar.
-              </Text>
-              <View style={{ height: 420 }} />
-              <Text style={[styles.termsBody, { color: colors.text }]}>Fin del contenido de terminos.</Text>
+              {TERMS_SECTIONS.map(section => (
+                <View key={section.title} style={styles.termsSection}>
+                  <Text style={[styles.termsSectionTitle, { color: colors.text }]}>{section.title}</Text>
+                  <Text style={[styles.termsBody, { color: colors.textSecondary }]}>{section.body}</Text>
+                </View>
+              ))}
             </ScrollView>
             <Button
               mode="contained"
@@ -276,7 +335,7 @@ export default function RegisterScreen() {
               }}
               style={styles.termsAccept}
             >
-              Aceptar
+              Aceptar términos
             </Button>
           </View>
         </View>
@@ -336,8 +395,9 @@ const styles = StyleSheet.create({
   termsTitle: { fontSize: 18, fontWeight: '700' },
   termsClose: { padding: 6 },
   termsContent: { borderWidth: 1, borderRadius: 8, padding: 12, maxHeight: 360 },
+  termsIntro: { fontSize: 12, lineHeight: 18, marginBottom: 12 },
+  termsSection: { marginBottom: 12 },
+  termsSectionTitle: { fontSize: 13, lineHeight: 19, fontWeight: '700', marginBottom: 4 },
   termsBody: { fontSize: 13, lineHeight: 20, marginBottom: 12 },
   termsAccept: { borderRadius: 8, marginTop: 14 },
 });
-
-

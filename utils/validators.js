@@ -1,18 +1,45 @@
+export const SUPPORTED_EMAIL_TLDS = new Set(['com', 'co', 'edu', 'org', 'net', 'gov', 'mil', 'info', 'io', 'app', 'dev', 'es']);
+
+export const isValidEmail = (email) => {
+  const value = String(email || '').trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(value)) {
+    return false;
+  }
+  const tld = value.split('.').pop();
+  return SUPPORTED_EMAIL_TLDS.has(tld);
+};
+
+export const normalizePhoneDigits = (phone, maxLength = 15) => String(phone || '').replace(/\D/g, '').slice(0, maxLength);
+
+export const isValidPhone = (phone) => {
+  const digits = normalizePhoneDigits(phone);
+  return digits.length >= 10 && digits.length <= 15;
+};
+
+export const passwordChecks = (password, confirmation = password) => ({
+  minLen: String(password || '').length >= 8,
+  upper: /[A-Z]/.test(password || ''),
+  lower: /[a-z]/.test(password || ''),
+  number: /[0-9]/.test(password || ''),
+  special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password || ''),
+  match: String(password || '').length > 0 && password === confirmation,
+});
+
 export const validators = {
   email: (email) => {
     if (!email) return 'El correo es requerido';
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!regex.test(email.trim())) return 'El correo no es válido';
+    if (!isValidEmail(email)) return 'El correo no es válido';
     return null;
   },
 
   password: (password) => {
     if (!password) return 'La contraseña es requerida';
-    if (password.length < 8) return 'Mínimo 8 caracteres';
-    if (!/[A-Z]/.test(password)) return 'Debe incluir una mayúscula';
-    if (!/[a-z]/.test(password)) return 'Debe incluir una minúscula';
-    if (!/[0-9]/.test(password)) return 'Debe incluir un número';
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return 'Debe incluir un carácter especial';
+    const checks = passwordChecks(password);
+    if (!checks.minLen) return 'Mínimo 8 caracteres';
+    if (!checks.upper) return 'Debe incluir una mayúscula';
+    if (!checks.lower) return 'Debe incluir una minúscula';
+    if (!checks.number) return 'Debe incluir un número';
+    if (!checks.special) return 'Debe incluir un carácter especial';
     return null;
   },
 
@@ -23,9 +50,9 @@ export const validators = {
   },
 
   phone: (phone) => {
-    const digits = String(phone || '').replace(/\D/g, '');
+    const digits = normalizePhoneDigits(phone);
     if (!digits) return 'El teléfono es requerido';
-    if (digits.length < 7 || digits.length > 15) return 'El teléfono no es válido';
+    if (!isValidPhone(phone)) return 'El teléfono no es válido';
     return null;
   },
 
