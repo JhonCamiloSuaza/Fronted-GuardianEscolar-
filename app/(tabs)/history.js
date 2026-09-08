@@ -1,21 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Modal, Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Avatar, IconButton, Surface, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isAvailableAsync, shareAsync } from 'expo-sharing';
 import CalendarDatePicker from '../../components/common/CalendarDatePicker';
-import JsonView from '../../components/common/JsonView';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { deleteHistory, deleteNotification, getHistory, getStudents } from '../../utils/studentStorage';
-
-const MOCK_HISTORY = [
-  { id: 'h1', estudiante: 'Carlos Perez', fecha: '2025-04-02', horaInicio: '7:15 AM', horaFin: '7:45 AM', duracion: '30 min', distancia: '4.2 km', estado: 'Completado', alerta: false, ruta: 'Casa - Colegio' },
-  { id: 'h2', estudiante: 'Carlos Perez', fecha: '2025-04-01', horaInicio: '2:30 PM', horaFin: '3:10 PM', duracion: '40 min', distancia: '4.5 km', estado: 'Completado', alerta: false, ruta: 'Colegio - Casa' },
-  { id: 'h3', estudiante: 'Maria Perez', fecha: '2025-04-02', horaInicio: '7:20 AM', horaFin: '7:50 AM', duracion: '30 min', distancia: '4.1 km', estado: 'En Proceso', alerta: false, ruta: 'Casa - Colegio' },
-  { id: 'h4', estudiante: 'Carlos Perez', fecha: '2025-03-31', horaInicio: '7:15 AM', horaFin: '7:55 AM', duracion: '40 min', distancia: '4.2 km', estado: 'Con Incidente', alerta: true, ruta: 'Casa - Colegio' },
-];
+import { deleteHistory, deleteNotification, getHistory } from '../../utils/studentStorage';
 
 export default function HistoryScreen() {
   const { width } = useWindowDimensions();
@@ -24,50 +18,31 @@ export default function HistoryScreen() {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const colors = theme.colors;
-  const [history, setHistory] = useState(MOCK_HISTORY);
+  const [history, setHistory] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filterStudent, setFilterStudent] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showReportJson, setShowReportJson] = useState(false);
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(async () => {
-      const [studentData, storedHistory] = await Promise.all([getStudents(), getHistory()]);
-      const combined = [...storedHistory, ...MOCK_HISTORY];
-      studentData.forEach((student) => {
-        if (!combined.find(item => item.estudiante === student.nombre)) {
-          combined.push({
-            id: `gen-${student.id}`,
-            estudiante: student.nombre,
-            fecha: new Date().toISOString().slice(0, 10),
-            horaInicio: '7:30 AM',
-            horaFin: '8:00 AM',
-            duracion: '30 min',
-            distancia: '3.8 km',
-            estado: 'Completado',
-            alerta: false,
-            ruta: 'Casa - Colegio',
-          });
-        }
-      });
-      setHistory(combined);
+    try {
+      const storedHistory = await getHistory();
+      setHistory(storedHistory);
+    } catch (error) {
+      Alert.alert(t('error'), error.message || 'No se pudo cargar el historial.');
+    } finally {
       setRefreshing(false);
-    }, 500);
-  }
+    }
+  }, [t]);
+
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   function confirmDeleteHistory(item) {
     const removeItem = async () => {
-      if (item.id.startsWith('gen-') || MOCK_HISTORY.find(mock => mock.id === item.id)) {
-        setHistory(prev => prev.filter(entry => entry.id !== item.id));
-      } else {
-        await deleteHistory(item.id);
-        await deleteNotification(item.id);
-        await loadData();
-      }
+      await deleteHistory(item.id);
+      await deleteNotification(item.id);
+      await loadData();
     };
 
     if (Platform.OS === 'web') {
@@ -100,6 +75,140 @@ export default function HistoryScreen() {
     if (item.alerta || item.estado === 'Con Incidente') return colors.error;
     if (item.estado === 'En Proceso') return colors.primary;
     return colors.accent;
+  };
+
+  const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const buildReportHtml = () => {
+    const generatedAt = new Date().toLocaleString('es-CO');
+    const activeFilters = [
+      ['Estudiante', filterStudent || 'Todos'],
+      ['Fecha', filterDate || 'Todas'],
+      ['Estado', statusFilter === 'all' ? 'Todos' : statusFilter],
+    ];
+    const rows = filteredHistory.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.estudiante)}</td>
+        <td>${escapeHtml(item.fecha)}</td>
+        <td>${escapeHtml(item.horaInicio)}${item.horaFin && item.horaFin !== '--' ? ` - ${escapeHtml(item.horaFin)}` : ''}</td>
+        <td>${escapeHtml(item.ruta)}</td>
+        <td><span class="status">${escapeHtml(item.estado)}</span></td>
+        <td>${escapeHtml(item.alerta ? 'Con alerta' : 'Normal')}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Reporte de historial de trayectos</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { margin: 0; padding: 32px; color: #172033; font-family: Arial, Helvetica, sans-serif; background: #ffffff; }
+          .header { border-bottom: 3px solid #1A4F8A; padding-bottom: 18px; margin-bottom: 24px; }
+          .brand { color: #1A4F8A; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+          h1 { margin: 8px 0 4px; font-size: 28px; line-height: 1.2; }
+          .muted { color: #64748b; font-size: 13px; }
+          .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
+          .card { border: 1px solid #dfe7f2; border-radius: 8px; padding: 12px; background: #f8fafc; }
+          .metric { color: #1A4F8A; font-size: 22px; font-weight: 800; }
+          .label { color: #64748b; font-size: 11px; font-weight: 700; margin-top: 3px; text-transform: uppercase; }
+          .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+          .filter { border: 1px solid #dfe7f2; border-radius: 999px; padding: 8px 12px; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #1A4F8A; color: #ffffff; font-size: 12px; text-align: left; padding: 10px; }
+          td { border-bottom: 1px solid #e5e7eb; font-size: 12px; padding: 10px; vertical-align: top; }
+          tr:nth-child(even) td { background: #f8fafc; }
+          .status { color: #1A4F8A; font-weight: 700; }
+          .empty { border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; padding: 24px; text-align: center; }
+          @media print {
+            body { padding: 18mm; }
+            .summary { grid-template-columns: repeat(4, 1fr); }
+            th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <section class="header">
+          <div class="brand">GPS Guardian Escolar</div>
+          <h1>Reporte de historial de trayectos</h1>
+          <div class="muted">Generado el ${escapeHtml(generatedAt)}</div>
+        </section>
+
+        <section class="summary">
+          <div class="card"><div class="metric">${stats.total}</div><div class="label">Total</div></div>
+          <div class="card"><div class="metric">${stats.completados}</div><div class="label">Completados</div></div>
+          <div class="card"><div class="metric">${stats.enProceso}</div><div class="label">En proceso</div></div>
+          <div class="card"><div class="metric">${stats.incidentes}</div><div class="label">Incidentes</div></div>
+        </section>
+
+        <section class="filters">
+          ${activeFilters.map(([label, value]) => `<div class="filter"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`).join('')}
+        </section>
+
+        ${filteredHistory.length === 0 ? '<div class="empty">No hay trayectos para los filtros seleccionados.</div>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th>Ruta</th>
+                <th>Estado</th>
+                <th>Observación</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `}
+      </body>
+      </html>
+    `;
+  };
+
+  const handleGenerateReport = async () => {
+    const html = buildReportHtml();
+
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      try {
+        const { uri } = await Print.printToFileAsync({
+          html,
+          width: 612,
+          height: 792,
+        });
+        if (await isAvailableAsync()) {
+          await shareAsync(uri, {
+            mimeType: 'application/pdf',
+            UTI: 'com.adobe.pdf',
+            dialogTitle: 'Guardar reporte PDF',
+          });
+          return;
+        }
+        Alert.alert('Reporte PDF', `PDF generado en: ${uri}`);
+      } catch (error) {
+        Alert.alert('Reporte PDF', error.message || 'No se pudo generar el PDF.');
+      }
+      return;
+    }
+
+    const reportWindow = window.open('', '_blank', 'width=980,height=720');
+    if (!reportWindow) {
+      Alert.alert('Reporte PDF', 'Permite ventanas emergentes para generar el reporte.');
+      return;
+    }
+    reportWindow.document.open();
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.onload = () => {
+      reportWindow.print();
+    };
   };
 
   const StatCard = ({ title, value, icon, color, type }) => {
@@ -169,8 +278,8 @@ export default function HistoryScreen() {
             <Text style={[styles.title, { color: colors.text }]}>{t('histTitle')}</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('histSubtitle')}</Text>
           </View>
-          <TouchableOpacity style={[styles.reportBtn, { backgroundColor: colors.primary }]} onPress={() => setShowReportJson(true)}>
-            <MaterialCommunityIcons name="code-json" size={18} color={colors.textOnPrimary} />
+          <TouchableOpacity style={[styles.reportBtn, { backgroundColor: colors.primary }]} onPress={handleGenerateReport}>
+            <MaterialCommunityIcons name="file-pdf-box" size={18} color={colors.textOnPrimary} />
             <Text style={[styles.reportBtnText, { color: colors.textOnPrimary }]}>{t('histReport')}</Text>
           </TouchableOpacity>
         </View>
@@ -217,17 +326,6 @@ export default function HistoryScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={showReportJson} transparent animationType="fade" onRequestClose={() => setShowReportJson(false)}>
-        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
-          <Surface style={[styles.reportModal, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={5}>
-            <View style={styles.reportHeader}>
-              <Text style={[styles.reportTitle, { color: colors.text }]}>{t('histReport')}</Text>
-              <IconButton icon="close" iconColor={colors.textSecondary} onPress={() => setShowReportJson(false)} />
-            </View>
-            <JsonView data={{ filters: { student: filterStudent, date: filterDate, status: statusFilter }, stats, results: filteredHistory }} maxHeight={460} />
-          </Surface>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -269,8 +367,4 @@ const styles = StyleSheet.create({
   statusBadgeText: { fontSize: 10, fontWeight: 'bold' },
   emptyContainer: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   emptyText: { fontSize: 14, fontWeight: '500' },
-  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
-  reportModal: { width: '100%', maxWidth: 760, borderRadius: 12, padding: 16, borderWidth: 1 },
-  reportHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  reportTitle: { fontSize: 18, fontWeight: '700' },
 });

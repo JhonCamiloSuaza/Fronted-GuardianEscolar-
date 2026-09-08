@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'gps_guardian_token';
 const USER_KEY = 'gps_guardian_user';
+const REMEMBERED_EMAIL_KEY = 'gps_guardian_remembered_email';
 
 export const storage = {
   // Token (seguro en móviles, AsyncStorage en web por compatibilidad)
@@ -66,6 +67,31 @@ export const storage = {
     try {
       await AsyncStorage.removeItem(USER_KEY);
     } catch (error) {}
+  },
+
+  setRememberedEmail: async (email) => {
+    try {
+      await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    } catch (error) {
+      console.error('Error guardando correo recordado:', error);
+    }
+  },
+
+  getRememberedEmail: async () => {
+    try {
+      return await AsyncStorage.getItem(REMEMBERED_EMAIL_KEY);
+    } catch (error) {
+      console.error('Error obteniendo correo recordado:', error);
+      return null;
+    }
+  },
+
+  removeRememberedEmail: async () => {
+    try {
+      await AsyncStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    } catch (error) {
+      console.error('Error eliminando correo recordado:', error);
+    }
   },
 
   clearAll: async () => {
