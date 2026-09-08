@@ -5,6 +5,7 @@ import { Animated, Modal, Platform, Pressable, StyleSheet, TouchableOpacity, use
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_LANGUAGES } from '../../translations';
 
@@ -35,6 +36,7 @@ function CustomHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const { t, lang, setLanguage } = useLanguage();
+  const { user } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
   
   const [isOnline, setIsOnline] = useState(true);
@@ -58,7 +60,7 @@ function CustomHeader() {
         });
         clearTimeout(timeoutId);
         setIsOnline(true);
-      } catch (e) {
+      } catch {
         setIsOnline(false);
       }
     };
@@ -75,7 +77,7 @@ function CustomHeader() {
       };
     }
     return () => clearInterval(interval);
-  }, []);
+  }, [pulseAnim]);
 
   // ─── Animación LIVE ───
   useEffect(() => {
@@ -90,12 +92,14 @@ function CustomHeader() {
       pulseAnim.stopAnimation();
       pulseAnim.setValue(1);
     }
-  }, [isOnline]);
+  }, [isOnline, pulseAnim]);
 
   useEffect(() => { setSelectedLang(lang); }, [lang]);
 
+  const isAdmin = user?.role === 'ADMIN' || user?.rol === 'ADMINISTRADOR' || user?.roles?.includes?.('ADMIN');
   const navItems = [
     { labelKey: 'navDashboard', route: '/(tabs)' },
+    ...(isAdmin ? [{ label: 'Admin', route: '/(tabs)/admin' }] : []),
     { labelKey: 'navStudent', route: '/(tabs)/student' },
     { labelKey: 'navTracking', route: '/(tabs)/tracking' },
     { labelKey: 'navZones', route: '/(tabs)/zones' },
@@ -129,7 +133,7 @@ function CustomHeader() {
               return (
                 <TouchableOpacity key={item.route} onPress={() => router.push(item.route)}>
                   <Text style={[styles.navLink, isActive && styles.navLinkActive, { color: theme.colors.textOnPrimary }]}>
-                    {t(item.labelKey)}
+                    {item.label || t(item.labelKey)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -220,7 +224,9 @@ function TabLayoutInner() {
   const screenType = getScreenType(width);
   const showTabBar = screenType !== 'wide' && screenType !== 'desktop';
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { theme } = useTheme();
+  const isAdmin = user?.role === 'ADMIN' || user?.rol === 'ADMINISTRADOR' || user?.roles?.includes?.('ADMIN');
 
   return (
     <Tabs
@@ -248,6 +254,16 @@ function TabLayoutInner() {
           title: t('tabDashboard'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="view-dashboard-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          href: isAdmin ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="shield-account-outline" color={color} size={size} />
           ),
         }}
       />

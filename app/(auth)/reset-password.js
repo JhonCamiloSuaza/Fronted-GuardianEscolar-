@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
@@ -21,6 +21,7 @@ const rulesFor = (password, confirmPassword) => ({
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { isAuthenticated } = useAuth();
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -49,7 +50,11 @@ export default function ResetPasswordScreen() {
 
     try {
       setIsSubmitting(true);
-      await authService.resetRecoveredPassword(password);
+      const token = params.token ? String(params.token) : '';
+      if (!token) {
+        throw new Error('El enlace de recuperación no incluye token.');
+      }
+      await authService.resetPasswordWithToken(token, password);
       setSuccessMsg(t('authPasswordChanged'));
       setTimeout(() => {
         router.replace(isAuthenticated ? '/(tabs)' : '/(auth)/login');

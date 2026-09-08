@@ -13,14 +13,14 @@ export const COLORS = {
 }
 
 export const TRACKING = {
-  DEVIATION_RADIUS_METERS: 100,   // alerta si se aleja más de 100m de la ruta
-  STOPPED_ALERT_MINUTES: 5,       // alerta si está detenido más de 5 minutos
-  UPDATE_INTERVAL_MS: 5000,       // actualiza posición cada 5 segundos
+  DEVIATION_RADIUS_METERS: 100,
+  STOPPED_ALERT_MINUTES: 5,
+  UPDATE_INTERVAL_MS: 5000,
 }
 
 export const ROLES = {
-  PARENT: 'PADRE',
-  ADMIN: 'ADMINISTRADOR',
+  PARENT: 'PARENT',
+  ADMIN: 'ADMIN',
 }
 
 export const STORAGE_KEYS = {

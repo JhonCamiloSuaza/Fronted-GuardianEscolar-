@@ -2,9 +2,13 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "module": "ESNext",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "forceConsistentCasingInFileNames": true,
     "paths": {
       "@/*": [
-        "./src/*"
+        "./*"
       ],
       "@/assets/*": [
         "./assets/*"
@@ -14,7 +18,9 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "src/app/explore.js", "src/app/index.js", "src/app/auth/forgot-password.js"  ]
+  ]
 }

@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import Constants from 'expo-constants';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Avatar, Button, Divider, IconButton, Surface, Switch, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,55 +8,91 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { authService } from '../../services/auth.service';
-
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
-
-const hasUpperCase = (v) => /[A-Z]/.test(v);
-const hasLowerCase = (v) => /[a-z]/.test(v);
-const hasNumber = (v) => /[0-9]/.test(v);
-const hasSpecial = (v) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
-const hasMinLength = (v) => v.length >= 8;
+import { notificationService } from '../../services/notification.service';
+import { SUPPORTED_LANGUAGES } from '../../translations';
+import { isValidEmail, isValidPhone, passwordChecks } from '../../utils/validators';
 
 export default function ProfileScreen() {
   const { user, logout, updateUserInSession } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { t } = useLanguage();
+  const { t, lang, setLanguage } = useLanguage();
   const { theme } = useTheme();
   const colors = theme.colors;
   const isWide = width >= 769;
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const currentLanguage = SUPPORTED_LANGUAGES.find(item => item.code === lang) || SUPPORTED_LANGUAGES[0];
 
   const [notifBateria, setNotifBateria] = useState(true);
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifSMS, setNotifSMS] = useState(false);
+  const [smsDisponible, setSmsDisponible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [emailModalVisible, setEmailModalVisible] = useState(false);
   const [twoFAModalVisible, setTwoFAModalVisible] = useState(false);
-  const [twoFAEnabled, setTwoFAEnabled] = useState(user?.twoFAEnabled || false);
-  const [twoFAMethod, setTwoFAMethod] = useState(user?.twoFAMethod || 'email');
-  const [twoFAStep, setTwoFAStep] = useState('config');
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [twoFAEnabled, setTwoFAEnabled] = useState(user?.twoFAEnabled === true);
+  const [twoFAMethod, setTwoFAMethod] = useState(user?.twoFAMethod || 'EMAIL');
+  const [twoFAToken, setTwoFAToken] = useState('');
   const [twoFACode, setTwoFACode] = useState('');
+  const [twoFAPassword, setTwoFAPassword] = useState('');
+  const [twoFASubmitting, setTwoFASubmitting] = useState(false);
   const [form, setForm] = useState({
-    name: user?.name || 'Usuario Demo',
-    email: user?.email || 'usuario@correo.com',
-    phone: user?.phone || '+57 300 000 0000',
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
   });
   const [emailForm, setEmailForm] = useState({ currentPassword: '', nextEmail: form.email });
   const [passForm, setPassForm] = useState({ current: '', next: '', confirm: '' });
 
-  const passReqs = {
-    minLen: hasMinLength(passForm.next),
-    upper: hasUpperCase(passForm.next),
-    lower: hasLowerCase(passForm.next),
-    number: hasNumber(passForm.next),
-    special: hasSpecial(passForm.next),
-    match: passForm.next.length > 0 && passForm.next === passForm.confirm,
-  };
+  const passReqs = passwordChecks(passForm.next, passForm.confirm);
   const allPassReqsMet = Object.values(passReqs).every(Boolean);
 
+  const applyNotificationPreferences = useCallback((config) => {
+    setNotifBateria(config.alertaInactividad ?? true);
+    setNotifEmail(config.canalEmail ?? true);
+    setNotifSMS(config.canalSms ?? false);
+    setSmsDisponible(config.smsDisponible ?? false);
+  }, []);
+
+  useEffect(() => {
+    notificationService.getPreferences()
+      .then(applyNotificationPreferences)
+      .catch(() => {});
+  }, [applyNotificationPreferences]);
+
+  useEffect(() => {
+    setTwoFAEnabled(user?.twoFAEnabled === true);
+    setTwoFAMethod(user?.twoFAMethod || 'EMAIL');
+  }, [user?.twoFAEnabled, user?.twoFAMethod]);
+
+  const updateNotificationPreferences = async (changes) => {
+    const previous = {
+      alertaInactividad: notifBateria,
+      canalEmail: notifEmail,
+      canalSms: notifSMS,
+    };
+    const next = { ...previous, ...changes };
+    setNotifBateria(next.alertaInactividad);
+    setNotifEmail(next.canalEmail);
+    setNotifSMS(next.canalSms);
+    try {
+      const saved = await notificationService.updatePreferences(next);
+      applyNotificationPreferences(saved);
+      if (changes.canalSms && !saved.smsDisponible) {
+        Alert.alert(t('profileNotifications'), t('profileSmsSavedNoProvider'));
+      }
+    } catch (error) {
+      setNotifBateria(previous.alertaInactividad);
+      setNotifEmail(previous.canalEmail);
+      setNotifSMS(previous.canalSms);
+      Alert.alert(t('error'), error.message || t('someError'));
+    }
+  };
+
   const handleSaveProfile = async () => {
-    if (!form.name.trim() || !form.phone.trim()) {
+    if (form.name.trim().length < 2 || form.name.trim().length > 100 || !isValidPhone(form.phone)) {
       Alert.alert(t('error'), t('invalidInput'));
       return;
     }
@@ -110,6 +147,70 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleRequest2FA = async (method) => {
+    try {
+      setTwoFASubmitting(true);
+      setTwoFACode('');
+      const challenge = await authService.request2FACode(method);
+      setTwoFAMethod(method);
+      Alert.alert(t('twoFACodeSent'), `${t('twoFACodeSentTo')} ${method === 'SMS' ? t('twoFASMS') : t('twoFAEmail')}.`);
+      setTwoFAToken(challenge.twoFAToken || '');
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('twoFAActivateFailed'));
+    } finally {
+      setTwoFASubmitting(false);
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    if (!/^\d{6}$/.test(twoFACode)) {
+      Alert.alert(t('error'), t('twoFAInvalidCode'));
+      return;
+    }
+    try {
+      setTwoFASubmitting(true);
+      if (!twoFAToken) {
+        throw new Error('Primero solicita un código de verificación.');
+      }
+      const session = await authService.verify2FA(twoFAToken, twoFACode, twoFAMethod);
+      await updateUserInSession({
+        twoFAEnabled: true,
+        twoFAMethod,
+        ...session.user,
+      });
+      setTwoFAEnabled(true);
+      setTwoFACode('');
+      setTwoFAPassword('');
+      setTwoFAToken('');
+      setTwoFAModalVisible(false);
+      Alert.alert(t('twoFAActivationTitle'), t('twoFAActivated'));
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('twoFAActivateFailed'));
+    } finally {
+      setTwoFASubmitting(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!twoFAPassword) {
+      Alert.alert(t('error'), t('profilePasswordCurrentRequired'));
+      return;
+    }
+    try {
+      setTwoFASubmitting(true);
+      const updated = await authService.disable2FA(twoFAPassword);
+      await updateUserInSession(updated);
+      setTwoFAEnabled(false);
+      setTwoFAMethod('EMAIL');
+      setTwoFAPassword('');
+      setTwoFAModalVisible(false);
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('twoFADeactivateFailed'));
+    } finally {
+      setTwoFASubmitting(false);
+    }
+  };
+
   const SettingItem = ({ label, subtitle, value, onValueChange, disabled }) => (
     <View style={[styles.settingItem, disabled && { opacity: 0.7 }]}>
       <View style={styles.settingTextCol}>
@@ -130,6 +231,10 @@ export default function ProfileScreen() {
         editable={editable}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete={secureTextEntry ? 'password' : undefined}
+        textContentType={secureTextEntry ? 'password' : 'none'}
         dense
         style={[styles.input, { backgroundColor: editable ? colors.surfaceSecondary : colors.background }]}
         outlineColor={colors.border}
@@ -193,10 +298,15 @@ export default function ProfileScreen() {
           <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
           <SettingItem label={t('profileDeviation')} subtitle={t('profileRequired')} value disabled />
           <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
-          <SettingItem label={t('profileBattery')} value={notifBateria} onValueChange={setNotifBateria} />
+          <SettingItem label={t('profileBattery')} value={notifBateria} onValueChange={value => updateNotificationPreferences({ alertaInactividad: value })} />
           <Text style={[styles.cardTitle, { marginTop: 20, color: colors.text }]}>{t('profileNotificationChannels')}</Text>
-          <SettingItem label={t('profileEmailNotif')} value={notifEmail} onValueChange={setNotifEmail} />
-          <SettingItem label={t('profileSMSNotif')} value={notifSMS} onValueChange={setNotifSMS} />
+          <SettingItem label={t('profileEmailNotif')} value={notifEmail} onValueChange={value => updateNotificationPreferences({ canalEmail: value })} />
+          <SettingItem
+            label={t('profileSMSNotif')}
+            subtitle={smsDisponible ? undefined : t('profileSmsProviderRequired')}
+            value={notifSMS}
+            onValueChange={value => updateNotificationPreferences({ canalSms: value })}
+          />
         </Surface>
 
         <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
@@ -205,12 +315,25 @@ export default function ProfileScreen() {
             <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileChangePass')}</Text>
             <MaterialCommunityIcons name="arrow-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.surfaceSecondary }]} onPress={() => { setTwoFAStep('config'); setTwoFACode(''); setTwoFAModalVisible(true); }}>
+          <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.surfaceSecondary }]} onPress={() => setTwoFAModalVisible(true)}>
             <View>
               <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profile2FA')}</Text>
-              <Text style={[styles.settingSub, { color: colors.textSecondary }]}>{twoFAEnabled ? t('profileEnabled') : t('profileDisabled')}</Text>
+              <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
+                {twoFAEnabled ? `${t('twoFAActive')} · ${twoFAMethod}` : t('twoFAInactive')}
+              </Text>
             </View>
             <MaterialCommunityIcons name="arrow-right" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </Surface>
+
+        <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t('profileLanguages')}</Text>
+          <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.surfaceSecondary }]} onPress={() => setLanguageModalVisible(true)}>
+            <View>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileLanguage')}</Text>
+              <Text style={[styles.settingSub, { color: colors.textSecondary }]}>{currentLanguage.flag} {currentLanguage.label}</Text>
+            </View>
+            <MaterialCommunityIcons name="web" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </Surface>
 
@@ -218,7 +341,7 @@ export default function ProfileScreen() {
           <Text style={[styles.cardTitle, { color: colors.text }]}>{t('profileInfo')}</Text>
           <View style={[styles.infoRow, { backgroundColor: colors.surfaceSecondary }]}>
             <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileAppVersion')}</Text>
-            <Text style={[styles.infoValueText, { color: colors.textSecondary }]}>1.5</Text>
+            <Text style={[styles.infoValueText, { color: colors.textSecondary }]}>{appVersion}</Text>
           </View>
           <View style={[styles.infoRow, { backgroundColor: colors.surfaceSecondary }]}>
             <Text style={[styles.settingLabel, { color: colors.text }]}>{t('profileAccountType')}</Text>
@@ -282,51 +405,76 @@ export default function ProfileScreen() {
               <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profile2FA')}</Text>
               <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setTwoFAModalVisible(false)} />
             </View>
-            {twoFAStep === 'config' ? (
-              <View>
-                <View style={[styles.twoFAStatusBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-                  <MaterialCommunityIcons name={twoFAEnabled ? 'shield-check' : 'shield-off-outline'} size={32} color={twoFAEnabled ? colors.accent : colors.textSecondary} />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={[styles.twoFAStatusTitle, { color: colors.text }]}>{twoFAEnabled ? t('twoFAActive') : t('twoFAInactive')}</Text>
-                    <Text style={[styles.twoFAStatusSub, { color: colors.textSecondary }]}>{twoFAEnabled ? t('twoFAProtected') : t('twoFAEnableHelp')}</Text>
-                  </View>
-                  <Switch value={twoFAEnabled} color={colors.accent} onValueChange={async (enabled) => {
-                    if (!enabled) {
-                      await authService.update2FA(form.email, false);
-                      await updateUserInSession({ twoFAEnabled: false });
-                      setTwoFAEnabled(false);
-                    } else {
-                      setTwoFAStep('verify');
-                    }
-                  }} />
+            <View>
+              <View style={[styles.twoFAStatusBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                <MaterialCommunityIcons name={twoFAEnabled ? 'shield-check-outline' : 'shield-off-outline'} size={32} color={twoFAEnabled ? colors.accent : colors.textSecondary} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.twoFAStatusTitle, { color: colors.text }]}>{twoFAEnabled ? t('twoFAActive') : t('twoFAInactive')}</Text>
+                  <Text style={[styles.twoFAStatusSub, { color: colors.textSecondary }]}>
+                    {twoFAEnabled ? t('twoFAProtected') : t('twoFAEnableHelp')}
+                  </Text>
                 </View>
-                {!twoFAEnabled && ['email', 'sms'].map(method => (
-                  <TouchableOpacity key={method} style={[styles.twoFAMethodBtn, { backgroundColor: colors.surfaceSecondary, borderColor: twoFAMethod === method ? colors.primary : colors.border }]} onPress={() => setTwoFAMethod(method)}>
-                    <MaterialCommunityIcons name={method === 'email' ? 'email-outline' : 'message-outline'} size={20} color={twoFAMethod === method ? colors.primary : colors.textSecondary} />
-                    <Text style={[styles.twoFAMethodText, { color: colors.text }]}>{method === 'email' ? t('twoFAEmail') : t('twoFASMS')}</Text>
+              </View>
+              {!twoFAEnabled ? (
+                <>
+                  <Text style={[styles.settingLabel, { color: colors.text, marginBottom: 10 }]}>{t('twoFAChooseMethod')}</Text>
+                  <TouchableOpacity style={[styles.twoFAMethodBtn, { borderColor: twoFAMethod === 'EMAIL' ? colors.primary : colors.border, backgroundColor: colors.surfaceSecondary }]} onPress={() => handleRequest2FA('EMAIL')}>
+                    <MaterialCommunityIcons name="email-outline" size={20} color={colors.primary} />
+                    <Text style={[styles.twoFAMethodText, { color: colors.text }]}>{t('twoFAEmail')}</Text>
                   </TouchableOpacity>
-                ))}
-                {!twoFAEnabled && <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={() => setTwoFAStep('verify')}>{t('twoFASendCode')}</Button>}
-              </View>
-            ) : (
-              <View>
-                <Text style={[styles.twoFAStatusSub, { color: colors.textSecondary, marginBottom: 12 }]}>{t('twoFADemoCode')} 847291</Text>
-                <Field label={t('twoFAEnterCode')} value={twoFACode} keyboardType="number-pad" onChangeText={setTwoFACode} />
-                <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={async () => {
-                  if (twoFACode !== '847291') {
-                    Alert.alert(t('error'), t('twoFAInvalidCode'));
-                    return;
-                  }
-                  await authService.update2FA(form.email, true, twoFAMethod);
-                  await updateUserInSession({ twoFAEnabled: true, twoFAMethod });
-                  setTwoFAEnabled(true);
-                  setTwoFAModalVisible(false);
-                  setTwoFAStep('config');
-                  setTwoFACode('');
-                  Alert.alert(t('twoFAActivationTitle'), t('twoFAActivated'));
-                }}>{t('twoFAVerifyActivate')}</Button>
-              </View>
-            )}
+                  <TouchableOpacity style={[styles.twoFAMethodBtn, { borderColor: twoFAMethod === 'SMS' ? colors.primary : colors.border, backgroundColor: colors.surfaceSecondary }]} onPress={() => handleRequest2FA('SMS')}>
+                    <MaterialCommunityIcons name="cellphone-message" size={20} color={colors.primary} />
+                    <Text style={[styles.twoFAMethodText, { color: colors.text }]}>{t('twoFASMS')}</Text>
+                  </TouchableOpacity>
+                  {twoFAToken ? (
+                    <>
+                      <Field label={t('twoFAEnterCode')} value={twoFACode} keyboardType="number-pad" onChangeText={value => setTwoFACode(value.replace(/\D/g, '').slice(0, 6))} />
+                      <Button mode="contained" loading={twoFASubmitting} disabled={twoFASubmitting} buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={handleVerify2FA}>
+                        {t('twoFAVerifyActivate')}
+                      </Button>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Field label={t('profileCurrentPass')} value={twoFAPassword} secureTextEntry onChangeText={setTwoFAPassword} />
+                  <Button mode="contained" loading={twoFASubmitting} disabled={twoFASubmitting} buttonColor={colors.error} textColor={colors.textOnPrimary} onPress={handleDisable2FA}>
+                    {t('twoFADisable')}
+                  </Button>
+                </>
+              )}
+            </View>
+          </Surface>
+        </View>
+      </Modal>
+
+      <Modal visible={languageModalVisible} transparent animationType="fade" onRequestClose={() => setLanguageModalVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Surface style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={5}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profileSelectLang')}</Text>
+              <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setLanguageModalVisible(false)} />
+            </View>
+            {SUPPORTED_LANGUAGES.map(item => {
+              const selected = item.code === lang;
+              return (
+                <TouchableOpacity
+                  key={item.code}
+                  style={[
+                    styles.languageOption,
+                    { backgroundColor: colors.surfaceSecondary, borderColor: selected ? colors.accent : colors.border },
+                  ]}
+                  onPress={() => {
+                    setLanguage(item.code);
+                    setLanguageModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.languageFlag}>{item.flag}</Text>
+                  <Text style={[styles.languageLabel, { color: selected ? colors.primary : colors.text }]}>{item.label}</Text>
+                  {selected && <MaterialCommunityIcons name="check-circle" size={20} color={colors.accent} />}
+                </TouchableOpacity>
+              );
+            })}
           </Surface>
         </View>
       </Modal>
@@ -377,4 +525,7 @@ const styles = StyleSheet.create({
   twoFAStatusSub: { fontSize: 12, marginTop: 2 },
   twoFAMethodBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10, gap: 10 },
   twoFAMethodText: { fontSize: 13, fontWeight: '600' },
+  languageOption: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 10 },
+  languageFlag: { fontSize: 20, marginRight: 10 },
+  languageLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
 });

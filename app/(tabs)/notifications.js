@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,36 +10,19 @@ import {
   RefreshControl,
   Platform
 } from 'react-native';
-import { Text, Surface } from 'react-native-paper';
 import { COLORS } from '../../constants/colors';
 import { useFocusEffect } from 'expo-router';
-import { getStudents, getNotifications, deleteNotification, deleteHistory } from '../../utils/studentStorage';
+import { getNotifications, deleteNotification, deleteHistory } from '../../utils/studentStorage';
+import { notificationService } from '../../services/notification.service';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useCallback } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const isWeb = Dimensions.get('window').width > 768;
 
-const NOTIFICATIONS = [
-  { id: 1, type: 'Exitosas',     name: 'Maria Pérez',  message: 'Maria llegó a zona segura: Colegio San Jose', time: 'Hace 15 Minutos', color: COLORS.ACENTO },
-  { id: 2, type: 'Informativas', name: 'Carlos Pérez', message: 'Carlos está en camino a casa',                time: 'Hace 15 Minutos', color: COLORS.PRIMARIO },
-  { id: 3, type: 'Advertencias', name: 'Carlos Pérez', message: 'Carlos salió de la zona segura',             time: 'Hace 18 Minutos', color: COLORS.ALERTA },
-  { id: 4, type: 'Exitosas',     name: 'Carlos Pérez', message: 'Carlos llegó a zona segura: Casa',           time: 'Hace 18 Minutos', color: COLORS.ACENTO },
-  { id: 5, type: 'Informativas', name: 'Maria Pérez',  message: 'Trayecto completado sin incidentes',         time: 'Hace 30 Minutos', color: COLORS.PRIMARIO },
-];
-
-const CHIP_COLORS = {
-  Todas:        { active: COLORS.PRIMARIO,  inactive: COLORS.GRIS_BORDE },
-  Exitosas:     { active: COLORS.ACENTO,    inactive: COLORS.GRIS_BORDE },
-  Advertencias: { active: COLORS.ALERTA,    inactive: COLORS.GRIS_BORDE },
-  Informativas: { active: COLORS.PRIMARIO,  inactive: COLORS.GRIS_BORDE },
-};
-
 export default function NotificationsScreen() {
   const [filter, setFilter] = useState('all');
-  const [students, setStudents] = useState([]);
-  const [notifications, setNotifications] = useState(NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -66,51 +49,51 @@ export default function NotificationsScreen() {
     Informativas: { active: colors.primary, inactive: colors.surfaceSecondary },
   };
 
+  const normalizeNotification = useCallback((item) => {
+    const tipo = item.tipo || item.type || 'Informativas';
+    const mappedType = tipo === 'ALERTA' || tipo === 'Advertencias' ? 'Advertencias'
+      : tipo === 'EXITO' || tipo === 'Exitosas' ? 'Exitosas'
+        : 'Informativas';
+    return {
+      id: item.id || item.reciboId,
+      type: mappedType,
+      name: item.estudianteNombre || item.name || t('notifDetail'),
+      message: item.mensaje || item.message || item.titulo || '',
+      time: item.recibidoEn || item.creadoEn || item.time || '',
+      color: mappedType === 'Advertencias' ? COLORS.ALERTA : mappedType === 'Exitosas' ? COLORS.ACENTO : COLORS.PRIMARIO,
+      read: item.leida || false,
+    };
+  }, [t]);
+
+  const loadNotifications = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [backendNotifs, storedNotifs] = await Promise.all([
+        notificationService.listNotifications().catch(() => []),
+        getNotifications(),
+      ]);
+      setNotifications([...backendNotifs.map(normalizeNotification), ...storedNotifs.map(normalizeNotification)]);
+    } catch (error) {
+      Alert.alert(t('error'), error.message || 'No se pudieron cargar las notificaciones.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [normalizeNotification, t]);
+
   useFocusEffect(
     useCallback(() => {
-      loadStudents();
-    }, [])
+      loadNotifications();
+    }, [loadNotifications])
   );
-
-  async function loadStudents() {
-    setRefreshing(true);
-    setTimeout(async () => {
-      const [studentData, storedNotifs] = await Promise.all([getStudents(), getNotifications()]);
-      setStudents(studentData);
-      
-      // Combinar notificaciones estáticas + almacenadas + dinámicas de registro
-      let combined = [...storedNotifs, ...NOTIFICATIONS];
-      
-      studentData.forEach((student) => {
-        if (!combined.find(n => n.id === `new-${student.id}`)) {
-          combined.push({
-            id: `new-${student.id}`,
-            type: 'Exitosas',
-            name: student.nombre,
-            message: `${student.nombre} ha sido registrado correctamente y está bajo protección.`,
-            time: 'Reciente',
-            color: COLORS.ACENTO
-          });
-        }
-      });
-
-      setNotifications(combined);
-      setRefreshing(false);
-    }, 1000);
-  }
 
   function confirmDeleteNotif(item) {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(t('delete') + '?');
       if (confirmed) {
         (async () => {
-          if (item.id.toString().startsWith('new-') || NOTIFICATIONS.find(n => n.id === item.id)) {
-            setNotifications(prev => prev.filter(n => n.id !== item.id));
-          } else {
-            await deleteNotification(item.id);
-            await deleteHistory(item.id); // Sincronizar borrado con historial
-            await loadStudents();
-          }
+          await deleteNotification(item.id);
+          await deleteHistory(item.id);
+          setNotifications(prev => prev.filter(n => n.id !== item.id));
         })();
       }
       return;
@@ -125,13 +108,9 @@ export default function NotificationsScreen() {
           text: t('delete'), 
           style: 'destructive',
           onPress: async () => {
-            if (item.id.toString().startsWith('new-') || NOTIFICATIONS.find(n => n.id === item.id)) {
-              setNotifications(prev => prev.filter(n => n.id !== item.id));
-            } else {
-              await deleteNotification(item.id);
-              await deleteHistory(item.id); // Sincronizar borrado con historial
-              await loadStudents();
-            }
+            await deleteNotification(item.id);
+            await deleteHistory(item.id);
+            setNotifications(prev => prev.filter(n => n.id !== item.id));
           }
         }
       ]
@@ -155,7 +134,7 @@ export default function NotificationsScreen() {
         contentContainerStyle={[styles.scrollContent, isWeb && styles.scrollContentWeb]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={loadStudents} colors={[COLORS.PRIMARIO]} tintColor={COLORS.PRIMARIO} />
+          <RefreshControl refreshing={refreshing} onRefresh={loadNotifications} colors={[COLORS.PRIMARIO]} tintColor={COLORS.PRIMARIO} />
         }
       >
         {/* Título */}
@@ -210,24 +189,10 @@ export default function NotificationsScreen() {
                 <View style={styles.notifInfo}>
                   <RNText style={[styles.notifName, themed.text]}>{item.name}</RNText>
                   <RNText style={[styles.notifMessage, themed.text]}>
-                    {t('live') === 'Live' 
-                      ? item.message
-                          .replace('llegó a zona segura', 'arrived at safe zone')
-                          .replace('está en camino a casa', 'is on his way home')
-                          .replace('está en camino', 'is on the way')
-                          .replace('salió de la zona segura', 'left the safe zone')
-                          .replace('Trayecto completado sin incidentes', 'Journey completed without incidents')
-                          .replace('ha sido registrado correctamente y está bajo protección.', 'has been successfully registered and is under protection.')
-                          .replace('Colegio San Jose', 'School San Jose')
-                          .replace('(Alerta)', '(Alert)')
-                          .replace('(Trayecto)', '(Journey)')
-                          .replace('(Seguro)', '(Safe)')
-                      : item.message}
+                    {item.message}
                   </RNText>
                   <RNText style={[styles.notifTime, themed.textSecondary]}>
-                    {t('live') === 'Live' 
-                      ? item.time.replace('Hace ', '').replace(' Minutos', ' min ago').replace('Reciente', 'Just now').replace('Ahora', 'Just now')
-                      : item.time}
+                    {item.time || t('live')}
                   </RNText>
                 </View>
                 <TouchableOpacity 

@@ -1,56 +1,40 @@
-# Welcome to your Expo app 👋
+# GPS Guardian Escolar - Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Cliente Expo/React Native para administradores, acudientes y estudiantes de GPS Guardian Escolar.
 
-## Get started
+## Requisitos
 
-1. Install dependencies
+- Node.js 20 o posterior.
+- Una API compatible en ejecucion.
 
-   ```bash
-   npm install
-   ```
+## Inicio local
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+npm ci
+Copy-Item .env.example .env
+npm run start:lan
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Configuracion
 
-### Other setup steps
+El archivo `.env` no se versiona. Parte de `.env.example` y ajusta estas variables:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- `EXPO_PUBLIC_API_URL`: URL base REST o `/api` cuando se use el proxy Nginx.
+- `EXPO_PUBLIC_WS_URL`: URL del WebSocket o `/ws` cuando se use el proxy Nginx.
+- `EXPO_PUBLIC_STUDENT_LINK_BASE_URL`: base para enlaces de estudiantes.
+- `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`: clave de Google Maps para mapas web.
 
-## Learn more
+## Docker
 
-To learn more about developing your project with Expo, look at the following resources:
+```powershell
+docker build -t gps-guardian-frontend .
+docker run --rm -p 8081:80 gps-guardian-frontend
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+El `nginx.conf` reenvia `/api` y `/ws` al host Docker `backend:8080`. Para usar ese proxy, ejecuta el contenedor en una red donde la API se llame `backend`; de lo contrario, configura `EXPO_PUBLIC_API_URL` y `EXPO_PUBLIC_WS_URL` con URLs absolutas antes de compilar.
 
-## Join the community
+## Validacion
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```powershell
+npm run lint
+```

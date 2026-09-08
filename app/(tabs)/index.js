@@ -5,7 +5,9 @@ import { ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } f
 import { Avatar, Surface, Text } from 'react-native-paper';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getInitials, getStudents } from '../../utils/studentStorage';
+import { getInitials, getNotifications, getStudents } from '../../utils/studentStorage';
+import { notificationService } from '../../services/notification.service';
+import { trackingService } from '../../services/tracking.service';
 
 // ════════════════════════════════════════════════════════════════
 // BREAKPOINTS
@@ -29,14 +31,61 @@ export default function DashboardScreen() {
   const screenType = getScreenType(width);
   const router = useRouter();
   const [students, setStudents] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [trips, setTrips] = useState([]);
   const { t } = useLanguage();
   const { theme } = useTheme();
 
   useFocusEffect(
     useCallback(() => {
-      getStudents().then(setStudents);
+      let isActive = true;
+
+      Promise.all([
+        getStudents(),
+        notificationService.listNotifications().catch(() => []),
+        getNotifications().catch(() => []),
+        trackingService.listTrips().catch(() => []),
+      ])
+        .then(([storedStudents, apiNotifications, storedNotifications, apiTrips]) => {
+          if (!isActive) return;
+          setStudents(storedStudents);
+          setNotifications([...apiNotifications, ...storedNotifications]);
+          setTrips(apiTrips);
+        })
+        .catch((error) => {
+          if (!isActive) return;
+          setStudents([]);
+          setNotifications([]);
+          setTrips([]);
+          console.warn('No se pudieron cargar los datos del panel:', error?.message || error);
+        });
+
+      return () => {
+        isActive = false;
+      };
     }, [])
   );
+
+  const unreadNotifications = notifications.filter((notification) => !notification.leida && !notification.read);
+  const recentNotifications = notifications.slice(0, 3);
+
+  const notificationColor = (notification) => {
+    const type = String(notification.tipo || notification.type || '').toUpperCase();
+    if (type.includes('ALERTA') || type.includes('ADVERT')) return theme.colors.error;
+    if (type.includes('EXITO') || type.includes('SUCCESS')) return theme.colors.success;
+    return theme.colors.primary;
+  };
+
+  const notificationMessage = (notification) => (
+    notification.mensaje || notification.message || notification.titulo || notification.title || t('notifDetail')
+  );
+
+  const notificationTime = (notification) => {
+    const value = notification.recibidoEn || notification.creadoEn || notification.time || notification.createdAt;
+    if (!value) return t('live');
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  };
 
   // ─── TARJETA DE ESTADÍSTICA ───
   const StatCard = ({ title, value, subvalue, icon, onPress }) => (
@@ -65,15 +114,6 @@ export default function DashboardScreen() {
       </Surface>
     </TouchableOpacity>
   );
-
-  // ─── GRID DE ESTADÍSTICAS ───
-  const getGridCols = () => {
-    if (screenType === 'mobile') return 2;
-    if (screenType === 'tablet') return 2;
-    if (screenType === 'desktop') return 3;
-    return 4;
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView 
@@ -106,14 +146,14 @@ export default function DashboardScreen() {
             />
             <StatCard
               title={t('dashAlerts')}
-              value="3"
+              value={String(unreadNotifications.length)}
               subvalue={t('dashNew')}
               icon="bell-alert"
               onPress={() => router.push('/(tabs)/notifications')}
             />
             <StatCard
               title={t('dashHistory')}
-              value="1"
+              value={String(trips.length)}
               subvalue={t('dashJourney')}
               icon="history"
               onPress={() => router.push('/(tabs)/history')}
@@ -226,56 +266,47 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
 
-          <Surface 
-            style={[
-              styles.cardSection,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }
-            ]}
-            elevation={1}
-          >
-            {/* Notificación 1 */}
-            <View style={styles.notificationItem}>
-              <View style={[styles.notifDot, { backgroundColor: theme.colors.accent }]} />
-              <View style={styles.notifContent}>
-                <Text style={[styles.notifText, { color: theme.colors.text }]} numberOfLines={2}>
-                  {t('dashNotifSafe')}
-                </Text>
-                <Text style={[styles.notifTime, { color: theme.colors.textMuted }]}>
-                  {t('time15MinAgo')}
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.notifDivider, { backgroundColor: theme.colors.border }]} />
-
-            {/* Notificación 2 */}
-            <View style={styles.notificationItem}>
-              <View style={[styles.notifDot, { backgroundColor: theme.colors.primary }]} />
-              <View style={styles.notifContent}>
-                <Text style={[styles.notifText, { color: theme.colors.text }]} numberOfLines={2}>
-                  {t('dashNotifHome')}
-                </Text>
-                <Text style={[styles.notifTime, { color: theme.colors.textMuted }]}>
-                  {t('time15MinAgo')}
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.notifDivider, { backgroundColor: theme.colors.border }]} />
-
-            {/* Notificación 3 */}
-            <View style={styles.notificationItem}>
-              <View style={[styles.notifDot, { backgroundColor: theme.colors.success }]} />
-              <View style={styles.notifContent}>
-                <Text style={[styles.notifText, { color: theme.colors.text }]} numberOfLines={2}>
-                  {t('dashNotifRoute')}
-                </Text>
-                <Text style={[styles.notifTime, { color: theme.colors.textMuted }]}>
-                  {t('time5HoursAgo')}
-                </Text>
-              </View>
-            </View>
-          </Surface>
+          {recentNotifications.length === 0 ? (
+            <Surface
+              style={[
+                styles.emptyStateCard,
+                { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }
+              ]}
+              elevation={0}
+            >
+              <MaterialCommunityIcons name="bell-outline" size={40} color={theme.colors.textMuted} />
+              <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
+                {t('dashNoRecentNotifs')}
+              </Text>
+            </Surface>
+          ) : (
+            <Surface
+              style={[
+                styles.cardSection,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }
+              ]}
+              elevation={1}
+            >
+              {recentNotifications.map((notification, index) => (
+                <View key={notification.id || notification.reciboId || `${notificationMessage(notification)}-${index}`}>
+                  <View style={styles.notificationItem}>
+                    <View style={[styles.notifDot, { backgroundColor: notificationColor(notification) }]} />
+                    <View style={styles.notifContent}>
+                      <Text style={[styles.notifText, { color: theme.colors.text }]} numberOfLines={2}>
+                        {notificationMessage(notification)}
+                      </Text>
+                      <Text style={[styles.notifTime, { color: theme.colors.textMuted }]}>
+                        {notificationTime(notification)}
+                      </Text>
+                    </View>
+                  </View>
+                  {index < recentNotifications.length - 1 && (
+                    <View style={[styles.notifDivider, { backgroundColor: theme.colors.border }]} />
+                  )}
+                </View>
+              ))}
+            </Surface>
+          )}
         </View>
       </ScrollView>
     </View>
