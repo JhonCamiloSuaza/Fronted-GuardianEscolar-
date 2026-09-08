@@ -8,7 +8,7 @@ function JsonView({ data, maxHeight = 420 }) {
   const json = useMemo(() => {
     try {
       return JSON.stringify(data ?? null, null, 2);
-    } catch (error) {
+    } catch {
       return JSON.stringify({ error: 'No se pudo serializar el JSON.' }, null, 2);
     }
   }, [data]);

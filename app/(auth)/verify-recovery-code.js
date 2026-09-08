@@ -43,7 +43,7 @@ export default function VerifyRecoveryCodeScreen() {
       await authService.verifyRecoveryCode(code);
       router.replace('/(auth)/choose-recovery-action');
     } catch (error) {
-      setErrorMsg(error.message === 'El codigo ha expirado' ? t('authExpiredCode') : t('authInvalidCode'));
+      setErrorMsg(error.message === 'El código ha expirado' ? t('authExpiredCode') : t('authInvalidCode'));
     } finally {
       setIsSubmitting(false);
     }

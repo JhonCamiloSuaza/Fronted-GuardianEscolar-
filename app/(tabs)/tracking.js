@@ -39,56 +39,53 @@ export default function TrackingScreen() {
     textSecondary: { color: colors.textSecondary },
   };
 
-  // Cargar estudiantes reales
+  const refreshLocation = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocation(null);
+        return;
+      }
+      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setLocation(current.coords);
+    } catch {
+      setLocation(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      getStudents().then(data => {
-        setStudents(data);
-        if (params.id && !selectedStudent) {
-          const found = data.find(s => s.id === params.id);
-          if (found) {
-            setSelectedStudent(found);
-            updateStudentSim(found);
-          }
-        } else if (data.length > 0 && !selectedStudent) {
-          setSelectedStudent(data[0]);
-          updateStudentSim(data[0]);
-        }
-      });
+      getStudents()
+        .then(data => {
+          setStudents(data);
+          setSelectedStudent(current => {
+            if (current) return current;
+            if (params.id) {
+              const found = data.find(s => s.id === params.id);
+              if (found) return found;
+            }
+            if (data.length > 0) return data[0];
+            return current;
+          });
+        })
+        .catch((error) => {
+          setStudents([]);
+          setSelectedStudent(null);
+          console.warn('No se pudieron cargar estudiantes para rastreo:', error?.message || error);
+        });
     }, [params.id])
   );
 
-  const updateStudentSim = (student) => {
-    const offset = (student.nombre.length % 10) * 0.002;
-    setLocation({
-      latitude: 4.5709 + offset,
-      longitude: -74.2973 - offset,
-    });
-  };
-
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
-    updateStudentSim(student);
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setLocation(INITIAL_REGION);
-          setIsLoading(false);
-          return;
-        }
-        const initial = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-        setLocation(initial.coords);
-        setIsLoading(false);
-      } catch (e) {
-        setLocation(INITIAL_REGION);
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+    refreshLocation();
+  }, [refreshLocation]);
 
   return (
     <View style={[styles.container, themed.screen]}>
@@ -113,10 +110,7 @@ export default function TrackingScreen() {
             size={20} 
             style={[styles.refreshBtn, themed.surfaceSecondary]} 
             iconColor={colors.textSecondary} 
-            onPress={() => {
-              setIsLoading(true);
-              setTimeout(() => setIsLoading(false), 1000);
-            }} 
+            onPress={refreshLocation}
           />
         </Surface>
 
@@ -166,7 +160,7 @@ export default function TrackingScreen() {
             containerColor={colors.surface}
             iconColor={colors.primary}
             style={styles.mapFab} 
-            onPress={() => updateStudentSim(selectedStudent)} 
+            onPress={refreshLocation}
           />
           
           {/* Leyenda del Mapa */}
@@ -195,10 +189,14 @@ export default function TrackingScreen() {
           <View style={styles.rowBetween}>
             <View>
               <Text style={[styles.cardTitle, themed.text]}>{t('trackLastUpdate')}</Text>
-              <Text style={[styles.cardSubtitle, themed.textSecondary]}>{t('trackMinutesAgo')}</Text>
+              <Text style={[styles.cardSubtitle, themed.textSecondary]}>
+                {location ? 'Ubicación local actualizada' : 'Sin ubicación disponible'}
+              </Text>
             </View>
             <View style={[styles.activeBadge, { backgroundColor: colors.accentLight }]}>
-              <Text style={[styles.activeBadgeText, { color: colors.success }]}>{t('trackActive')}</Text>
+              <Text style={[styles.activeBadgeText, { color: location ? colors.success : colors.warning }]}>
+                {location ? t('trackActive') : 'Sin datos'}
+              </Text>
             </View>
           </View>
         </Surface>
@@ -209,20 +207,22 @@ export default function TrackingScreen() {
           
           <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="target" size={16} color={COLORS.ALERTA} style={styles.statusIcon} />
-            <Text style={[styles.statusText, themed.text]}>{t('trackOnRoute')}</Text>
+            <Text style={[styles.statusText, themed.text]}>
+              {selectedStudent ? 'Esperando trayecto activo' : t('trackSelectStudent')}
+            </Text>
           </View>
           
           <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="lightning-bolt" size={16} color={COLORS.ADVERTENCIA} style={styles.statusIcon} />
-            <Text style={[styles.statusText, themed.text]}>{t('trackSpeed')} {selectedStudent ? (selectedStudent.nombre.length * 4) : 15} km/h</Text>
+            <Text style={[styles.statusText, themed.text]}>{t('trackSpeed')} -- km/h</Text>
           </View>
           
           <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="map-marker" size={16} color={COLORS.PRIMARIO} style={styles.statusIcon} />
             <Text style={[styles.statusText, themed.text]}>
-              {selectedStudent?.nombre === 'Maria Pérez' ? 'Calle 45 #23-10, Neiva' : 
-               selectedStudent?.nombre === 'Carlos Pérez' ? 'Carrera 7 #33-90, Bogotá' :
-               selectedStudent ? `Av. Principal #10-${selectedStudent.nombre.length}, Soacha` : 'Calle 45 #23-10, Neiva'}
+              {location
+                ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
+                : 'Sin ubicación registrada'}
             </Text>
           </View>
         </Surface>
@@ -231,8 +231,8 @@ export default function TrackingScreen() {
         <Surface style={[styles.infoCard, themed.surface]} elevation={1}>
           <Text style={[styles.cardTitle, themed.text]}>{t('trackRecentAlert')}</Text>
           <View style={[styles.alertBox, { backgroundColor: colors.accentLight }]}>
-            <Text style={[styles.alertBoxTitle, { color: colors.success }]}>{t('live') === 'Live' ? 'Arrived at Safe Zone' : 'Llegó a Zona Segura'}</Text>
-            <Text style={[styles.alertBoxSub, { color: colors.success }]}>{t('trackMinutesAgo')}</Text>
+            <Text style={[styles.alertBoxTitle, { color: colors.success }]}>Sin alertas recientes</Text>
+            <Text style={[styles.alertBoxSub, { color: colors.success }]}>Cuando exista una notificación real aparecerá aquí.</Text>
           </View>
         </Surface>
 
