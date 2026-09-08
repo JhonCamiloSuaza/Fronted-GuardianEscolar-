@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Dimensions,
@@ -13,7 +13,9 @@ import {
   View
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
+import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { authService } from '../../services/auth.service';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -21,15 +23,42 @@ const isWeb = Dimensions.get('window').width > 768;
 
 export default function VerifyCodeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const { setAuthState } = useAuth();
   const { t } = useLanguage();
   const [code, setCode] = useState(['', '', '', '', '', '']);
+  const [twoFAToken, setTwoFAToken] = useState(String(params.token || ''));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const inputs = useRef([]);
+  const method = String(params.method || 'EMAIL');
+  const destination = method === 'SMS' ? 'teléfono' : 'correo';
 
   const handleInputChange = (text, index) => {
-    const cleaned = text.replace(/[^0-9]/g, '').slice(0, 1);
+    const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
     const newCode = [...code];
+
+    if (cleaned.length > 1) {
+      cleaned.split('').forEach((digit, offset) => {
+        const targetIndex = index + offset;
+        if (targetIndex < newCode.length) {
+          newCode[targetIndex] = digit;
+        }
+      });
+      setCode(newCode);
+      setErrorMsg('');
+      setSuccessMsg('');
+      const nextEmptyIndex = newCode.findIndex((digit) => !digit);
+      inputs.current[nextEmptyIndex === -1 ? 5 : nextEmptyIndex]?.focus();
+      return;
+    }
+
     newCode[index] = cleaned;
     setCode(newCode);
+    setErrorMsg('');
+    setSuccessMsg('');
     if (cleaned && index < 5) {
       inputs.current[index + 1]?.focus();
     }
@@ -41,19 +70,57 @@ export default function VerifyCodeScreen() {
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const fullCode = code.join('');
+    setErrorMsg('');
     if (fullCode.length < 6) {
       alert(t('authVerifyCode'));
       return;
     }
-    router.push('/(auth)/reset-password');
+    if (!twoFAToken) {
+      setErrorMsg('No se encontró el token de verificación. Inicia sesión de nuevo.');
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const session = await authService.complete2FALogin(twoFAToken, fullCode, method);
+      setAuthState(session);
+      router.replace('/(tabs)');
+    } catch (error) {
+      setErrorMsg(error.message || t('twoFAInvalidCode'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!twoFAToken) {
+      setErrorMsg('No se encontró el token de verificación. Inicia sesión de nuevo.');
+      return;
+    }
+
+    try {
+      setIsResending(true);
+      const result = await authService.resend2FA(twoFAToken);
+      if (result.twoFAToken) {
+        setTwoFAToken(result.twoFAToken);
+      }
+      setCode(['', '', '', '', '', '']);
+      setSuccessMsg(result.message || 'Código reenviado. Revisa tu correo.');
+      inputs.current[0]?.focus();
+    } catch (error) {
+      setErrorMsg(error.message || 'No se pudo reenviar el código.');
+    } finally {
+      setIsResending(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(auth)/login')}>
           <MaterialCommunityIcons name="arrow-left" size={28} color={COLORS.PRIMARIO} />
         </TouchableOpacity>
       </View>
@@ -78,8 +145,8 @@ export default function VerifyCodeScreen() {
           <View style={[styles.card, isWeb && styles.cardWeb]}>
             <Text style={styles.title}>{t('authVerifyCode')}</Text>
             <Text style={styles.subtitle}>
-              Enviamos un código de verificación a{'\n'}
-              <Text style={styles.email}>CorreoExample@gmail.com</Text>
+              Enviamos un código de verificación a tu {destination}{'\n'}
+              <Text style={styles.email}>{params.email || method}</Text>
             </Text>
 
             {/* OTP Inputs */}
@@ -89,8 +156,11 @@ export default function VerifyCodeScreen() {
                   key={index}
                   ref={(ref) => { inputs.current[index] = ref; }}
                   style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
-                  maxLength={1}
+                  maxLength={6}
                   keyboardType="number-pad"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  textContentType="oneTimeCode"
                   value={digit}
                   onChangeText={(text) => handleInputChange(text, index)}
                   onKeyPress={(e) => handleKeyPress(e, index)}
@@ -101,14 +171,19 @@ export default function VerifyCodeScreen() {
 
             {/* Botón Verificar */}
             <TouchableOpacity style={styles.verifyBtn} onPress={handleVerify} activeOpacity={0.85}>
-              <Text style={styles.verifyText}>{t('authVerifyCode')}</Text>
+              <Text style={styles.verifyText}>{isSubmitting ? 'Verificando...' : t('authVerifyCode')}</Text>
             </TouchableOpacity>
+
+            {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+            {successMsg ? <Text style={styles.successText}>{successMsg}</Text> : null}
 
             {/* Reenviar */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>¿No Recibiste el Codigo? </Text>
-              <TouchableOpacity onPress={() => alert('Código reenviado')}>
-                <Text style={styles.resendLink}>Reenviar codigo</Text>
+              <Text style={styles.footerText}>¿No recibiste el código? </Text>
+              <TouchableOpacity onPress={handleResend} disabled={isResending}>
+                <Text style={[styles.resendLink, isResending ? styles.resendLinkDisabled : null]}>
+                  {isResending ? 'Reenviando...' : 'Reenviar código'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -254,10 +329,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.TEXTO_SECUNDARIO,
   },
+  errorText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  successText: {
+    color: '#1B7F3A',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
   resendLink: {
     fontSize: 13,
     color: COLORS.PRIMARIO,
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  resendLinkDisabled: {
+    color: COLORS.TEXTO_SECUNDARIO,
   },
 });

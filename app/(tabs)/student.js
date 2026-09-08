@@ -15,16 +15,67 @@ import {
   View
 } from 'react-native';
 import { Avatar, Button, FAB, Surface, Text } from 'react-native-paper';
+import QRCode from 'react-native-qrcode-svg';
+import { STUDENT_LINK_BASE_URL } from '../../config/endpoints';
 import { COLORS } from '../../constants/colors';
+import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { addHistory, addNotification, addStudent, deleteStudent, getStudents, updateStudent } from '../../utils/studentStorage';
+import { studentService } from '../../services/student.service';
+import { addStudent, deleteStudent, getStudents, normalizeGrade, updateStudent } from '../../utils/studentStorage';
 
 const { width } = Dimensions.get('window');
 const isWeb = width > 768;
 const isTablet = width > 600 && width <= 1024;
+const MIN_STUDENT_AGE = 3;
+const MAX_STUDENT_AGE = 21;
+const EMPTY_FORM = {
+  nombre: '',
+  grado: '',
+  fechaNacimiento: '',
+  contacto_nombre: '',
+  contacto_telefono: '',
+  contacto_parentesco: 'Acudiente',
+};
 
-const EMPTY_FORM = { nombre: '', grado: '', colegio: '', edad: '', contacto_nombre: '', contacto_telefono: '', status: 'SAFE' };
+function formatBirthDateInput(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
+
+function parseValidBirthDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function calculateAgeFromDate(date) {
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const monthDelta = today.getMonth() - date.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < date.getDate())) age -= 1;
+  return age;
+}
+
+function formatEmergencyPhoneInput(value) {
+  return value.replace(/\D/g, '').slice(0, 10);
+}
 
 export default function StudentScreen() {
   const [students, setStudents] = useState([]);
@@ -35,7 +86,14 @@ export default function StudentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fotoCargada, setFotoCargada] = useState(null); // guardara la URI de la imagen
   const [codigoGenerado, setCodigoGenerado] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [sharingStudent, setSharingStudent] = useState(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [guardians, setGuardians] = useState([]);
+  const [shareLoading, setShareLoading] = useState(false);
   const router = useRouter();
+  const { user } = useAuth();
   const { t } = useLanguage();
   const { theme } = useTheme();
   const colors = theme.colors;
@@ -49,28 +107,31 @@ export default function StudentScreen() {
     overlay: { backgroundColor: colors.overlay },
   };
 
+  const loadStudents = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await getStudents();
+      setStudents(data);
+    } catch (error) {
+      Alert.alert(t('error'), error.message || 'No se pudieron cargar los estudiantes.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [t]);
+
   // Recarga cada vez que la pantalla recibe foco
   useFocusEffect(
     useCallback(() => {
       loadStudents();
-    }, [])
+    }, [loadStudents])
   );
-
-  async function loadStudents() {
-    setRefreshing(true);
-    // Simular retraso de red para que se vea el cargador
-    setTimeout(async () => {
-      const data = await getStudents();
-      setStudents(data);
-      setRefreshing(false);
-    }, 1000);
-  }
 
   function openAdd() {
     setEditingStudent(null);
     setForm(EMPTY_FORM);
     setFotoCargada(null);
     setCodigoGenerado(null);
+    setFormErrors({});
     setModalVisible(true);
   }
 
@@ -79,15 +140,52 @@ export default function StudentScreen() {
     setForm({
       nombre: student.nombre,
       grado: student.grado,
-      colegio: student.colegio,
-      edad: student.edad || '',
+      fechaNacimiento: student.fechaNacimiento || '',
       contacto_nombre: student.contacto_nombre || '',
       contacto_telefono: student.contacto_telefono || '',
-      status: student.status || 'SAFE'
+      contacto_parentesco: student.contacto_parentesco || 'Acudiente',
     });
     setFotoCargada(student.foto || null);
     setCodigoGenerado(student.codigo_vinculacion || null);
+    setFormErrors({});
     setModalVisible(true);
+  }
+
+  async function openShare(student) {
+    setSharingStudent(student);
+    setShareEmail('');
+    setGuardians([]);
+    setShareModalVisible(true);
+    try {
+      const data = await studentService.listGuardians(student.id);
+      setGuardians(data);
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('studShareLoadError'));
+    }
+  }
+
+  async function handleShareAccess() {
+    const email = shareEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      Alert.alert(t('error'), t('studShareInvalidEmail'));
+      return;
+    }
+    setShareLoading(true);
+    try {
+      await studentService.shareWithGuardian(sharingStudent.id, { email, relationshipRole: 'VIEWER' });
+      const [guardianData, updatedStudents] = await Promise.all([
+        studentService.listGuardians(sharingStudent.id),
+        getStudents(),
+      ]);
+      setGuardians(guardianData);
+      setStudents(updatedStudents);
+      setShareEmail('');
+      Alert.alert(t('studShareSuccessTitle'), t('studShareSuccessMessage'));
+    } catch (error) {
+      Alert.alert(t('error'), error.message || t('studShareError'));
+    } finally {
+      setShareLoading(false);
+    }
   }
 
   function confirmDelete(student) {
@@ -140,26 +238,63 @@ export default function StudentScreen() {
     }
   };
 
-  async function handleSave() {
-    if (!form.nombre.trim()) {
-      Alert.alert(t('studRequiredField'), t('studRequiredName'));
-      return;
-    }
-    if (!form.edad.trim() || Number(form.edad) < 1 || Number(form.edad) > 100) {
-      Alert.alert(t('studRequiredField'), 'La edad debe estar entre 1 y 100.');
-      return;
-    }
+  function validateForm() {
+    const errors = {};
+    const name = form.nombre.trim();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const birthDate = parseValidBirthDate(form.fechaNacimiento);
+
+    if (name.length < 2) errors.nombre = 'El nombre debe tener al menos 2 caracteres.';
+    if (name.length > 100) errors.nombre = 'El nombre no puede superar 100 caracteres.';
     if (!form.grado.trim()) {
-      Alert.alert(t('studRequiredField'), 'El grado es obligatorio.');
-      return;
+      errors.grado = 'Selecciona o escribe el grado escolar.';
+    } else if (!normalizeGrade(form.grado)) {
+      errors.grado = 'Usa un grado válido, por ejemplo 4, Cuarto o Décimo.';
     }
-    if (!form.contacto_nombre.trim()) {
-      Alert.alert(t('studRequiredField'), 'El contacto de emergencia es obligatorio.');
-      return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.fechaNacimiento)) {
+      errors.fechaNacimiento = 'Escribe solo numeros: AAAAMMDD.';
+    } else if (!birthDate || birthDate >= today) {
+      errors.fechaNacimiento = 'La fecha de nacimiento debe ser anterior a hoy.';
+    } else {
+      const age = calculateAgeFromDate(birthDate);
+      if (age < MIN_STUDENT_AGE || age > MAX_STUDENT_AGE) {
+        errors.fechaNacimiento = `La edad debe estar entre ${MIN_STUDENT_AGE} y ${MAX_STUDENT_AGE} años.`;
+      }
+    }
+    const contactName = form.contacto_nombre.trim();
+    if (contactName.length < 2) {
+      errors.contacto_nombre = 'El contacto de emergencia debe tener al menos 2 caracteres.';
+    } else if (contactName.length > 100) {
+      errors.contacto_nombre = 'El contacto de emergencia no puede superar 100 caracteres.';
+    } else if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/.test(contactName)) {
+      errors.contacto_nombre = 'El contacto solo debe tener letras y espacios.';
     }
     const phoneDigits = form.contacto_telefono.replace(/\D/g, '');
-    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
-      Alert.alert(t('studRequiredField'), 'Ingresa un teléfono válido, solo números.');
+    if (!/^3\d{9}$/.test(phoneDigits)) {
+      errors.contacto_telefono = 'Ingresa un celular colombiano válido de 10 dígitos, inicia por 3.';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  function getStudentLink(student) {
+    const params = new URLSearchParams({
+      id: student.id,
+      codigo: student.codigo_vinculacion || '',
+      nombre: student.nombre || '',
+      grado: student.grado || '',
+      edad: student.edad || '',
+      contacto: student.contacto_nombre || '',
+      telefono: student.contacto_telefono || '',
+    });
+    return `${STUDENT_LINK_BASE_URL}/student-dashboard?${params.toString()}`;
+  }
+
+  async function handleSave() {
+    if (!validateForm()) {
+      Alert.alert(t('studRequiredField'), 'Revisa los campos marcados antes de guardar.');
       return;
     }
     setLoading(true);
@@ -172,46 +307,22 @@ export default function StudentScreen() {
         updated = await addStudent(dataToSave);
       }
       setStudents(updated);
-      
-      // Registrar en Notificaciones e Historial si el estado es relevante
-      if (form.status) {
-        const msg = form.status === 'WARNING' ? 'salio de la zona segura (Alerta)' : 
-                    form.status === 'INFO' ? 'está en camino' : 
-                    'llego a zona segura';
-        
-        await addNotification({
-          studentId: editingStudent ? editingStudent.id : updated[updated.length - 1].id,
-          type: form.status === 'WARNING' ? 'Advertencias' : 
-                form.status === 'INFO' ? 'Informativas' : 'Exitosas',
-          name: form.nombre,
-          message: `${form.nombre} ${msg}`,
-          color: form.status === 'WARNING' ? COLORS.ALERTA : 
-                 form.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
-        });
-
-        await addHistory({
-          studentId: editingStudent ? editingStudent.id : updated[updated.length - 1].id,
-          estudiante: form.nombre,
-          horaInicio: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          horaFin: '--',
-          duracion: '--',
-          distancia: '--',
-          estado: form.status === 'WARNING' ? 'Con Incidente' : 
-                  form.status === 'INFO' ? 'En Proceso' : 'Completado',
-          alerta: form.status === 'WARNING',
-          ruta: 'Actualización manual',
-          studentColor: form.status === 'WARNING' ? COLORS.ALERTA : 
-                        form.status === 'INFO' ? COLORS.PRIMARIO : COLORS.ACENTO
-        });
-      }
-
       setModalVisible(false);
+    } catch (error) {
+      Alert.alert(t('error'), error.message || 'No se pudo guardar el estudiante.');
     } finally {
       setLoading(false);
     }
   }
 
-  const StudentCard = ({ item }) => (
+  function canManageStudent(student) {
+    const roles = Array.isArray(user?.roles) ? user.roles : [];
+    return student.usuarioId === user?.id || user?.role === 'ADMIN' || roles.includes('ADMIN');
+  }
+
+  const StudentCard = ({ item }) => {
+    const canManage = canManageStudent(item);
+    return (
     <Surface style={[styles.childCard, themed.surface, { flex: isWeb ? 1 : undefined }]} elevation={2}>
       <View style={styles.childAvatarWrap}>
         {item.foto && item.foto.trim().length > 0 && item.foto !== 'null' && item.foto !== 'undefined' ? (
@@ -237,7 +348,7 @@ export default function StudentScreen() {
       </View>
       <Text style={[styles.childName, themed.text]}>{item.nombre}</Text>
       <Text style={[styles.childSub, themed.textSecondary]}>
-        {item.edad ? `${item.edad} ${t('studYears')}` : ''} {item.grado ? `- ${t('live') === 'Live' ? item.grado.replace('ro Grado', 'rd Grade').replace('to Grado', 'th Grade').replace('do Grado', 'nd Grade').replace('er Grado', 'st Grade').replace('Grado', 'Grade').replace('1ro', '1st Grade').replace('2do', '2nd Grade').replace('3ro', '3rd Grade').replace('4to', '4th Grade').replace('5to', '5th Grade').replace('do', 'nd').replace('ro', 'rd').replace('to', 'th') : item.grado}` : ''}
+        {item.edad ? `${item.edad} ${t('studYears')}` : ''} {item.grado ? `- ${item.grado}` : ''}
       </Text>
       
       <View style={styles.badgeWrap}>
@@ -259,6 +370,31 @@ export default function StudentScreen() {
         <Text style={[styles.contactPhone, themed.textSecondary]}>{item.contacto_telefono || t('studNotAssigned')}</Text>
       </View>
 
+      <View style={[styles.linkedDevicesBox, themed.surfaceSecondary]}>
+        <MaterialCommunityIcons name="account-eye" size={18} color={colors.primary} />
+        <Text style={[styles.linkedDevicesText, themed.text]}>
+          {item.acudientes_vinculados || 1} {t('studPeopleWithAccess')}
+        </Text>
+      </View>
+
+      <View style={[styles.linkedDevicesBox, themed.surfaceSecondary]}>
+        <MaterialCommunityIcons name="cellphone-marker" size={18} color={colors.accent} />
+        <Text style={[styles.linkedDevicesText, themed.text]}>
+          {item.dispositivos_vinculados || 0} {t('studPhonesSendingLocation')}
+        </Text>
+      </View>
+
+      {canManage && (
+        <View style={[styles.qrCard, themed.surfaceSecondary]}>
+          <QRCode value={getStudentLink(item)} size={92} />
+          <View style={styles.qrTextCol}>
+            <Text style={[styles.qrTitle, themed.text]}>{t('studLinkDevice')}</Text>
+            <Text style={[styles.qrCodeText, { color: colors.primary }]}>{item.codigo_vinculacion}</Text>
+            <Text style={[styles.qrHint, themed.textSecondary]}>{t('studScanQrStudentPhone')}</Text>
+          </View>
+        </View>
+      )}
+
       <Button 
         mode="contained" 
         buttonColor={
@@ -271,17 +407,34 @@ export default function StudentScreen() {
         {t('studViewMap')}
       </Button>
 
+      {canManage && (
+        <Button
+          mode="outlined"
+          style={styles.shareAccessBtn}
+          textColor={colors.primary}
+          onPress={() => openShare(item)}
+        >
+          {t('studShareAccess')}
+        </Button>
+      )}
+
       {/* Acciones flotantes */}
-      <View style={styles.cardActionsFloating}>
-        <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => openEdit(item)} accessibilityLabel={t('edit')}>
-          <MaterialCommunityIcons name="pencil" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => confirmDelete(item)} accessibilityLabel={t('delete')}>
-          <MaterialCommunityIcons name="trash-can" size={16} color={colors.error} />
-        </TouchableOpacity>
-      </View>
+      {canManage && (
+        <View style={styles.cardActionsFloating}>
+          <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => openEdit(item)} accessibilityLabel={t('edit')}>
+            <MaterialCommunityIcons name="pencil" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => openShare(item)} accessibilityLabel={t('studShareAccess')}>
+            <MaterialCommunityIcons name="account-plus" size={16} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtnIcon, themed.surfaceSecondary]} onPress={() => confirmDelete(item)} accessibilityLabel={t('delete')}>
+            <MaterialCommunityIcons name="trash-can" size={16} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+      )}
     </Surface>
-  );
+    );
+  };
 
   return (
     <View style={[styles.container, themed.screen]}>
@@ -340,79 +493,64 @@ export default function StudentScreen() {
                 </Text>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mockupScroll}>
+              <ScrollView style={styles.mockupScrollArea} showsVerticalScrollIndicator contentContainerStyle={styles.mockupScroll}>
                 <Text style={[styles.mockupLabel, themed.textSecondary]}>Nombre completo del estudiante *</Text>
                 <TextInput
-                  style={[styles.mockupInput, themed.input]}
+                  style={[styles.mockupInput, themed.input, formErrors.nombre && styles.inputError]}
                   value={form.nombre}
                   onChangeText={v => setForm(f => ({ ...f, nombre: v }))}
+                  placeholder="Nombre y apellido"
+                  placeholderTextColor={colors.textMuted}
                 />
+                {!!formErrors.nombre && <Text style={styles.errorText}>{formErrors.nombre}</Text>}
 
                 <View style={styles.mockupRow}>
                   <View style={styles.mockupHalfFieldLeft}>
-                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Edad</Text>
+                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Fecha de nacimiento *</Text>
                     <TextInput
-                      style={[styles.mockupInput, themed.input]}
-                      value={form.edad}
-                      onChangeText={v => setForm(f => ({ ...f, edad: v.replace(/\D/g, '').slice(0, 3) }))}
-                      keyboardType="numeric"
+                      style={[styles.mockupInput, themed.input, formErrors.fechaNacimiento && styles.inputError]}
+                      value={form.fechaNacimiento}
+                      onChangeText={v => setForm(f => ({ ...f, fechaNacimiento: formatBirthDateInput(v) }))}
+                      placeholder="AAAAMMDD"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="number-pad"
                     />
+                    {!!formErrors.fechaNacimiento && <Text style={styles.errorText}>{formErrors.fechaNacimiento}</Text>}
                   </View>
                   <View style={styles.mockupHalfFieldRight}>
-                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Grado</Text>
+                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Grado *</Text>
                     <TextInput
-                      style={[styles.mockupInput, themed.input]}
+                      style={[styles.mockupInput, themed.input, formErrors.grado && styles.inputError]}
                       value={form.grado}
                       onChangeText={v => setForm(f => ({ ...f, grado: v }))}
+                      placeholder="Ej: Tercero"
+                      placeholderTextColor={colors.textMuted}
                     />
+                    {!!formErrors.grado && <Text style={styles.errorText}>{formErrors.grado}</Text>}
                   </View>
                 </View>
 
-                <Text style={[styles.mockupLabel, themed.textSecondary]}>Contacto de Emergencia</Text>
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Contacto de emergencia *</Text>
                 <TextInput
-                  style={[styles.mockupInput, themed.input]}
+                  style={[styles.mockupInput, themed.input, formErrors.contacto_nombre && styles.inputError]}
                   value={form.contacto_nombre}
                   onChangeText={v => setForm(f => ({ ...f, contacto_nombre: v }))}
+                  placeholder="Nombre del acudiente o contacto"
+                  placeholderTextColor={colors.textMuted}
                 />
+                {!!formErrors.contacto_nombre && <Text style={styles.errorText}>{formErrors.contacto_nombre}</Text>}
 
-                <Text style={[styles.mockupLabel, themed.textSecondary]}>Teléfono de emergencia</Text>
+                <Text style={[styles.mockupLabel, themed.textSecondary]}>Teléfono de emergencia *</Text>
                 <TextInput
-                  style={[styles.mockupInput, themed.input]}
+                  style={[styles.mockupInput, themed.input, formErrors.contacto_telefono && styles.inputError]}
                   value={form.contacto_telefono}
-                  onChangeText={v => setForm(f => ({ ...f, contacto_telefono: v.replace(/\D/g, '').slice(0, 15) }))}
-                  keyboardType="phone-pad"
+                  onChangeText={v => setForm(f => ({ ...f, contacto_telefono: formatEmergencyPhoneInput(v) }))}
+                  placeholder="3001234567"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={10}
                 />
-
-                <Text style={[styles.mockupLabel, themed.textSecondary]}>Estado de Simulación</Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                  {[
-                    { id: 'SAFE', label: 'Seguro', color: COLORS.ACENTO },
-                    { id: 'INFO', label: 'Trayecto', color: COLORS.PRIMARIO },
-                    { id: 'WARNING', label: 'Alerta', color: COLORS.ALERTA }
-                  ].map(status => (
-                    <TouchableOpacity
-                      key={status.id}
-                      onPress={() => setForm(f => ({ ...f, status: status.id }))}
-                      style={{
-                        flex: 1,
-                        paddingVertical: 8,
-                        borderRadius: 8,
-                        backgroundColor: form.status === status.id ? status.color : colors.surfaceSecondary,
-                        borderWidth: 1,
-                        borderColor: form.status === status.id ? status.color : colors.border,
-                        alignItems: 'center'
-                      }}
-                    >
-                      <Text style={{ 
-                        fontSize: 12, 
-                        fontWeight: '600', 
-                        color: form.status === status.id ? COLORS.BLANCO : colors.textSecondary 
-                      }}>
-                        {status.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                {!!formErrors.contacto_telefono && <Text style={styles.errorText}>{formErrors.contacto_telefono}</Text>}
 
                 <Text style={[styles.mockupLabel, themed.textSecondary]}>Subir foto del estudiante (Opcional)</Text>
                 
@@ -452,25 +590,22 @@ export default function StudentScreen() {
                 <View style={[styles.mockupInfoBox, { borderColor: colors.primary }]}>
                   <Text style={[styles.mockupInfoTitle, { color: colors.primary }]}>Vincular Dispositivo del Estudiante</Text>
                   <Text style={[styles.mockupInfoDesc, themed.textSecondary]}>
-                    El estudiante no necesita cuenta. Solo instala la app en su celular y vincula su dispositivo usando el código QR o token.
+                    Guarda el estudiante y usa el QR generado para abrir la vista de vinculación en su celular.
                   </Text>
                   
-                  {codigoGenerado ? (
+                  {editingStudent && codigoGenerado ? (
                     <View style={[styles.codigoBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                      <QRCode value={getStudentLink(editingStudent)} size={isWeb ? 116 : 104} />
                       <Text style={[styles.codigoText, { color: colors.primary }]}>Código: {codigoGenerado}</Text>
-                      <Text style={[styles.codigoHint, themed.textSecondary]}>Ingresa este código en el celular del estudiante</Text>
+                      <Text style={[styles.codigoHint, themed.textSecondary]}>Escanea este QR desde el celular del estudiante.</Text>
+                      <Text style={[styles.qrUrlHint, themed.textSecondary]} numberOfLines={1}>
+                        {STUDENT_LINK_BASE_URL}
+                      </Text>
                     </View>
                   ) : (
-                    <TouchableOpacity 
-                      style={[styles.mockupGenerateBtn, { backgroundColor: colors.primary }]} 
-                      onPress={() => {
-                        const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
-                        setCodigoGenerado(randomCode);
-                        Alert.alert('Código Generado', `El código de vinculación es: ${randomCode}`);
-                      }}
-                    >
-                      <Text style={styles.mockupGenerateText}>Generar código de vinculación</Text>
-                    </TouchableOpacity>
+                    <View style={[styles.codigoBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                      <Text style={[styles.codigoHint, themed.textSecondary]}>El QR se genera automáticamente después de guardar.</Text>
+                    </View>
                   )}
                 </View>
               </ScrollView>
@@ -486,25 +621,63 @@ export default function StudentScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
-    </View>
-  );
-}
 
-function Field({ label, icon, value, onChange, placeholder, keyboardType }) {
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.fieldInput}>
-        <MaterialCommunityIcons name={icon} size={18} color={COLORS.PRIMARIO} style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={onChange}
-          placeholder={placeholder}
-          placeholderTextColor={COLORS.TEXTO_SECUNDARIO}
-          keyboardType={keyboardType || 'default'}
-        />
-      </View>
+      <Modal
+        visible={shareModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, themed.overlay]}>
+          <Surface style={[styles.shareModal, themed.surface]} elevation={5}>
+            <View style={[styles.modalHeaderMockup, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitleMockup, themed.text]}>{t('studShareTracking')}</Text>
+            </View>
+            <Text style={[styles.shareSubtitle, themed.textSecondary]}>
+              {sharingStudent?.nombre}
+            </Text>
+            <Text style={[styles.mockupLabel, themed.textSecondary]}>{t('studShareEmailLabel')}</Text>
+            <TextInput
+              style={[styles.mockupInput, themed.input]}
+              value={shareEmail}
+              onChangeText={setShareEmail}
+              placeholder="correo@ejemplo.com"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <Button
+              mode="contained"
+              buttonColor={colors.primary}
+              textColor={colors.textOnPrimary}
+              loading={shareLoading}
+              disabled={shareLoading}
+              onPress={handleShareAccess}
+              style={styles.shareButton}
+            >
+              {t('studShareButton')}
+            </Button>
+
+            <Text style={[styles.guardianTitle, themed.text]}>{t('studPeopleWhoCanTrack')}</Text>
+            <ScrollView style={styles.guardianList}>
+              {guardians.map(item => (
+                <View key={item.id || item.usuarioId} style={[styles.guardianRow, themed.surfaceSecondary]}>
+                  <MaterialCommunityIcons name={item.relationshipRole === 'OWNER' ? 'account-star' : 'account-eye'} size={18} color={colors.primary} />
+                  <View style={styles.guardianInfo}>
+                    <Text style={[styles.guardianName, themed.text]}>{item.fullName || item.nombreCompleto}</Text>
+                    <Text style={[styles.guardianEmail, themed.textSecondary]}>{item.email || item.correo}</Text>
+                  </View>
+                  <Text style={[styles.guardianRole, { color: colors.primary }]}>{item.relationshipRole}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity style={[styles.mockupCancelBtn, { borderColor: colors.border, marginTop: 14 }]} onPress={() => setShareModalVisible(false)}>
+              <Text style={[styles.mockupCancelText, themed.text]}>{t('close')}</Text>
+            </TouchableOpacity>
+          </Surface>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -618,10 +791,54 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
+  linkedDevicesBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  linkedDevicesText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  qrCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+  },
+  qrTextCol: {
+    flex: 1,
+  },
+  qrTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  qrCodeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  qrHint: {
+    fontSize: 11,
+    marginTop: 4,
+  },
   verMapaBtn: {
     borderRadius: 8,
     minHeight: 42,
     justifyContent: 'center',
+  },
+  shareAccessBtn: {
+    borderRadius: 8,
+    minHeight: 40,
+    justifyContent: 'center',
+    marginTop: 10,
   },
   cardActionsFloating: {
     position: 'absolute',
@@ -682,6 +899,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   modalKAV: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
@@ -772,29 +990,81 @@ const styles = StyleSheet.create({
   modalSheetMockup: {
     backgroundColor: COLORS.BLANCO,
     borderRadius: 10,
-    paddingTop: 14,
+    paddingTop: 10,
     paddingBottom: 0,
-    maxWidth: 780,
+    maxWidth: 760,
     alignSelf: 'center',
-    width: isWeb ? (isTablet ? '85%' : '82%') : '95%',
-    maxHeight: '86%',
+    width: isWeb ? (isTablet ? '86%' : '78%') : '94%',
+    maxHeight: isWeb ? '78%' : '84%',
     overflow: 'hidden',
+  },
+  shareModal: {
+    backgroundColor: COLORS.BLANCO,
+    borderRadius: 10,
+    padding: 20,
+    width: isWeb ? 520 : '92%',
+    maxHeight: '86%',
+    borderWidth: 1,
+  },
+  shareSubtitle: {
+    textAlign: 'center',
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  shareButton: {
+    borderRadius: 8,
+    marginBottom: 18,
+  },
+  guardianTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  guardianList: {
+    maxHeight: 240,
+  },
+  guardianRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  guardianInfo: {
+    flex: 1,
+  },
+  guardianName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  guardianEmail: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  guardianRole: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   modalHeaderMockup: {
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    paddingBottom: 16,
-    marginBottom: 16,
+    paddingBottom: 10,
+    marginBottom: 0,
   },
   modalTitleMockup: {
     fontSize: 16,
     fontWeight: '500',
     color: '#111827',
   },
+  mockupScrollArea: {
+    flex: 1,
+  },
   mockupScroll: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingHorizontal: isWeb ? 20 : 14,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
   mockupLabel: {
     fontSize: 12,
@@ -807,9 +1077,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     minHeight: 40,
     paddingHorizontal: 10,
-    marginBottom: 16,
+    marginBottom: 12,
     backgroundColor: '#FFF',
     fontSize: 13,
+  },
+  inputError: {
+    borderColor: COLORS.ALERTA,
+  },
+  errorText: {
+    color: COLORS.ALERTA,
+    fontSize: 11,
+    marginTop: -7,
+    marginBottom: 8,
   },
   mockupRow: {
     flexDirection: isWeb ? 'row' : 'column',
@@ -831,7 +1110,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 16,
     alignSelf: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 14,
   },
   mockupUploadText: {
     fontSize: 13,
@@ -841,9 +1120,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#93C5FD',
     borderRadius: 6,
-    padding: 16,
-    marginBottom: 24,
-    minHeight: 138,
+    padding: 14,
+    marginBottom: 12,
+    minHeight: 120,
   },
   mockupInfoTitle: {
     fontSize: 13,
@@ -853,7 +1132,7 @@ const styles = StyleSheet.create({
   mockupInfoDesc: {
     fontSize: 12,
     color: '#4B5563',
-    marginBottom: 16,
+    marginBottom: 12,
     lineHeight: 18,
   },
   mockupGenerateBtn: {
@@ -870,15 +1149,16 @@ const styles = StyleSheet.create({
   },
   codigoBox: {
     backgroundColor: '#EEF2FF',
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#C7D2FE',
     width: '100%',
+    gap: 6,
   },
   codigoText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#4338CA',
     letterSpacing: 2,
@@ -887,15 +1167,20 @@ const styles = StyleSheet.create({
   codigoHint: {
     fontSize: 11,
     color: '#6366F1',
-    marginTop: 4,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  qrUrlHint: {
+    fontSize: 10,
+    maxWidth: '100%',
   },
   mockupActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 18,
+    paddingHorizontal: isWeb ? 20 : 14,
+    paddingTop: 10,
+    paddingBottom: 12,
     borderTopWidth: 1,
   },
   mockupCancelBtn: {

@@ -21,6 +21,8 @@ export default function AuthLayout() {
       <Stack.Screen name="verify-recovery-code" options={{ headerShown: false }} />
       <Stack.Screen name="choose-recovery-action" options={{ headerShown: false }} />
       <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+      <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+      <Stack.Screen name="confirm-login" options={{ headerShown: false }} />
     </Stack>
   );
 }

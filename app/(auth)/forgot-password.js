@@ -27,7 +27,7 @@ export default function ForgotPasswordScreen() {
     try {
       setIsSubmitting(true);
       await authService.requestPasswordRecovery(contact);
-      router.push('/(auth)/verify-recovery-code');
+      router.replace('/(auth)/login');
     } catch (error) {
       setErrorMsg(error.message || t('someError'));
     } finally {
@@ -63,7 +63,7 @@ export default function ForgotPasswordScreen() {
                 }}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                placeholder="correo@ejemplo.com o +57 300 123 4567"
+                placeholder="correo@ejemplo.com"
                 outlineColor={colors.border}
                 activeOutlineColor={colors.primary}
                 style={[styles.input, { backgroundColor: colors.surfaceSecondary }]}
@@ -88,7 +88,7 @@ export default function ForgotPasswordScreen() {
                 textColor={colors.textOnPrimary}
                 disabled={isSubmitting}
               >
-                {t('authSendCode')}
+                Enviar enlace de recuperación
               </Button>
             </View>
           </View>
@@ -124,4 +124,3 @@ const styles = StyleSheet.create({
   errorBox: { borderRadius: 8, padding: 10, marginBottom: 10, borderWidth: 1 },
   errorText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
 });
-
