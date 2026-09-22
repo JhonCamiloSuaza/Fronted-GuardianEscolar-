@@ -159,3 +159,7 @@ La línea que se dibuja en el mapa para mostrar la **ruta recorrida** por el est
 | `tracking/` | Paneles de información del seguimiento GPS en tiempo real |
 
 > Estas carpetas están preparadas para cuando el proyecto escale y se necesite más organización de componentes específicos por módulo.
+
+## Actualizacion HU-12
+
+`components/common/CalendarDatePicker.js` permite seleccionar rapidamente mes y año desde el encabezado, ademas de elegir el dia, limpiar la fecha o cerrar el modal. El componente usa los colores del tema y mantiene el formato `AAAA-MM-DD`.

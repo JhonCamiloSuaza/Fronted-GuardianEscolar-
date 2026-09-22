@@ -1,5 +1,11 @@
 {
   "appName": "GPS School Guardian",
+  "landingPromiseTitle": "Proteja cada trajeto escolar",
+  "landingPromiseText": "O GPS Guardian Escolar permite consultar a localizacao, rotas, zonas seguras e alertas dos seus filhos em um so lugar.",
+  "landingQrText": "Escaneie o QR da crianca para vincular o dispositivo e iniciar o rastreamento.",
+  "studSearch": "Buscar por nome, serie ou escola",
+  "studClearSearch": "Limpar busca",
+  "studNoResults": "Nenhuma crianca corresponde a busca.",
   "live": "Ao vivo",
   "offline": "Sem sinal",
   "tabDashboard": "Inicio",

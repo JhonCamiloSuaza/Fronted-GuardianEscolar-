@@ -256,3 +256,7 @@ fr: {                        // después
 | `app/(tabs)/_layout.js` | Selector de idioma (modal del header) |
 | `utils/storage.js` | AsyncStorage subyacente para persistir el código de idioma |
 | Cada `*.js` de pantalla | Consumidor del hook `useLanguage()` |
+
+## Actualizacion HU-12
+
+Los grados escolares se normalizan a valores internos estables como `THIRD`, evitando que el cambio de idioma altere el dato guardado. La interfaz muestra etiquetas consistentes y las traducciones existentes se conservan para español, ingles, frances y portugues.

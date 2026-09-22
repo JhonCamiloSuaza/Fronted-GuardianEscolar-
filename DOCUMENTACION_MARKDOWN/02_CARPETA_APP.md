@@ -251,3 +251,7 @@ Pantalla de perfil del acudiente con todas las configuraciones de la app. Incluy
 - **Seguridad**: cambio de contraseña, autenticación de dos factores.
 - **Selector de idioma**: acceso directo al cambio de idioma.
 - **Cerrar sesión**.
+
+## Actualizacion HU-12
+
+Se actualizaron las rutas de hijos y autenticacion. El registro y edicion de hijos ahora usan un calendario visual, validaciones de nombre, grado, fecha y edad, y una busqueda por nombre, grado, colegio o contacto. La pantalla de verificacion de codigo respeta el tema oscuro.

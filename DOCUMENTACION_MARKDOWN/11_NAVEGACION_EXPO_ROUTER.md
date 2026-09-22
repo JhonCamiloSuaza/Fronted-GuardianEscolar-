@@ -255,3 +255,7 @@ const isActive = pathname === item.route
   </Text>
 </TouchableOpacity>
 ```
+
+## Actualizacion HU-12
+
+Las rutas existentes se conservan. Las mejoras se integran en las pantallas de hijos, perfil y autenticacion sin crear rutas adicionales. La navegacion principal fue ajustada para mantener legibilidad y contraste en modo oscuro.

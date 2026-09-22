@@ -15,6 +15,7 @@ import {
 import { COLORS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { authService } from '../../services/auth.service';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,6 +27,8 @@ export default function VerifyCodeScreen() {
   const params = useLocalSearchParams();
   const { setAuthState } = useAuth();
   const { t } = useLanguage();
+  const { theme } = useTheme();
+  const colors = theme.colors;
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [twoFAToken, setTwoFAToken] = useState(String(params.token || ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -118,14 +121,14 @@ export default function VerifyCodeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(auth)/login')}>
-          <MaterialCommunityIcons name="arrow-left" size={28} color={COLORS.PRIMARIO} />
+          <MaterialCommunityIcons name="arrow-left" size={28} color={colors.primary} />
         </TouchableOpacity>
       </View>
       <KeyboardAvoidingView
-        style={styles.root}
+        style={[styles.root, { backgroundColor: colors.background }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
       <ScrollView
@@ -139,14 +142,14 @@ export default function VerifyCodeScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.appTitle}>{t('appName')}</Text>
+          <Text style={[styles.appTitle, { color: colors.primary }]}>{t('appName')}</Text>
 
           {/* Card */}
-          <View style={[styles.card, isWeb && styles.cardWeb]}>
-            <Text style={styles.title}>{t('authVerifyCode')}</Text>
-            <Text style={styles.subtitle}>
+          <View style={[styles.card, isWeb && styles.cardWeb, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.title, { color: colors.text }]}>{t('authVerifyCode')}</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               Enviamos un código de verificación a tu {destination}{'\n'}
-              <Text style={styles.email}>{params.email || method}</Text>
+              <Text style={[styles.email, { color: colors.text }]}>{params.email || method}</Text>
             </Text>
 
             {/* OTP Inputs */}
@@ -155,7 +158,7 @@ export default function VerifyCodeScreen() {
                 <TextInput
                   key={index}
                   ref={(ref) => { inputs.current[index] = ref; }}
-                  style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
+                  style={[styles.otpBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text }, digit ? [styles.otpBoxFilled, { backgroundColor: colors.surfaceElevated, borderColor: colors.primary, color: colors.primary }] : null]}
                   maxLength={6}
                   keyboardType="number-pad"
                   inputMode="numeric"
@@ -170,18 +173,18 @@ export default function VerifyCodeScreen() {
             </View>
 
             {/* Botón Verificar */}
-            <TouchableOpacity style={styles.verifyBtn} onPress={handleVerify} activeOpacity={0.85}>
-              <Text style={styles.verifyText}>{isSubmitting ? 'Verificando...' : t('authVerifyCode')}</Text>
+            <TouchableOpacity style={[styles.verifyBtn, { backgroundColor: colors.primary }]} onPress={handleVerify} activeOpacity={0.85}>
+              <Text style={[styles.verifyText, { color: colors.white }]}>{isSubmitting ? 'Verificando...' : t('authVerifyCode')}</Text>
             </TouchableOpacity>
 
-            {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
-            {successMsg ? <Text style={styles.successText}>{successMsg}</Text> : null}
+            {errorMsg ? <Text style={[styles.errorText, { color: colors.error }]}>{errorMsg}</Text> : null}
+            {successMsg ? <Text style={[styles.successText, { color: colors.success }]}>{successMsg}</Text> : null}
 
             {/* Reenviar */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>¿No recibiste el código? </Text>
+              <Text style={[styles.footerText, { color: colors.textSecondary }]}>¿No recibiste el código? </Text>
               <TouchableOpacity onPress={handleResend} disabled={isResending}>
-                <Text style={[styles.resendLink, isResending ? styles.resendLinkDisabled : null]}>
+                <Text style={[styles.resendLink, { color: colors.primary }, isResending ? [styles.resendLinkDisabled, { color: colors.textSecondary }] : null]}>
                   {isResending ? 'Reenviando...' : 'Reenviar código'}
                 </Text>
               </TouchableOpacity>

@@ -1,5 +1,11 @@
 {
   "appName": "GPS School Guardian",
+  "landingPromiseTitle": "Protect every school journey",
+  "landingPromiseText": "GPS School Guardian lets you check your children's location, routes, safe zones and alerts in one place.",
+  "landingQrText": "Scan the child's QR code to link the device and start tracking.",
+  "studSearch": "Search by name, grade or school",
+  "studClearSearch": "Clear search",
+  "studNoResults": "No children match your search.",
   "live": "Live",
   "offline": "Offline",
   "tabDashboard": "Home",
