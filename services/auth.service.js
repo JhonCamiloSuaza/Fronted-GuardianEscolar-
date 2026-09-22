@@ -75,7 +75,7 @@ export const authService = {
         email: email.trim().toLowerCase(),
         password,
         ...deviceInfo,
-      });
+      }, { skipAuth: true });
       return normalizeAuthResponse(response.data);
     } catch (error) {
       throw new Error(getApiErrorMessage(error, 'No se pudo iniciar sesión.'));
@@ -289,3 +289,4 @@ export const authService = {
     return null;
   },
 };
+

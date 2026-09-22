@@ -13,11 +13,11 @@ export default function ConfirmLoginScreen() {
   const params = useLocalSearchParams();
   const { theme } = useTheme();
   const colors = theme.colors;
+  const token = params.token ? String(params.token) : '';
   const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('Confirmando este dispositivo...');
 
   useEffect(() => {
-    const token = params.token ? String(params.token) : '';
     if (!token) {
       setStatus('error');
       setMessage('El enlace no incluye token de confirmación.');
@@ -33,7 +33,7 @@ export default function ConfirmLoginScreen() {
         setStatus('error');
         setMessage(error.message || 'No se pudo confirmar el dispositivo.');
       });
-  }, [params.token]);
+  }, [token]);
 
   const isSuccess = status === 'success';
   const returnUrl = params.returnUrl ? String(params.returnUrl) : '';

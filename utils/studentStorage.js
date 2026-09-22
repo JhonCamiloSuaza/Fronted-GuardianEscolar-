@@ -43,10 +43,22 @@ const NUMBER_TO_GRADE_ENUM = {
   11: 'ELEVENTH',
 };
 
-const ENUM_TO_GRADE = Object.entries(GRADE_TO_ENUM).reduce((acc, [label, value]) => {
-  if (!acc[value]) acc[value] = label;
-  return acc;
-}, {});
+const ENUM_TO_GRADE = {
+  PRE_KINDER: 'Prejardin',
+  KINDER: 'Jardin',
+  TRANSITION: 'Transicion',
+  FIRST: 'Primero',
+  SECOND: 'Segundo',
+  THIRD: 'Tercero',
+  FOURTH: 'Cuarto',
+  FIFTH: 'Quinto',
+  SIXTH: 'Sexto',
+  SEVENTH: 'Septimo',
+  EIGHTH: 'Octavo',
+  NINTH: 'Noveno',
+  TENTH: 'Decimo',
+  ELEVENTH: 'Undecimo',
+};
 
 export function getInitials(nombre = '') {
   const parts = nombre.trim().split(/\s+/).filter(Boolean);

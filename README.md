@@ -1,37 +1,56 @@
-# GPS Guardian Escolar - Frontend
+# Fronted-GuardianEscolar-
 
-Cliente Expo/React Native para administradores, acudientes y estudiantes de GPS Guardian Escolar.
+Este repositorio/carpeta contiene la aplicacion cliente de GPS Guardian Escolar.
 
-## Requisitos
+## Funcion
 
-- Node.js 20 o posterior.
-- Una API compatible en ejecucion.
+El frontend permite que administradores, acudientes y estudiantes interactuen con el sistema. Consume la API del backend, muestra rutas, seguimiento, historial, notificaciones, perfil, autenticacion, verificacion de correo y recuperacion de cuenta.
 
-## Inicio local
+## Componentes
+
+- `app/(auth)`: login, registro, verificacion y recuperacion.
+- `app/(tabs)`: pantallas principales del usuario autenticado.
+- `components`: componentes visuales reutilizables.
+- `services`: clientes HTTP y servicios de comunicacion.
+- `contexts`: estado global de autenticacion y sesion.
+- `config/endpoints.js`: URLs del backend, WebSocket y enlaces publicos.
+- `translations`: textos de interfaz.
+- `Dockerfile`: construye la version web con Expo.
+- `nginx.conf`: sirve la aplicacion web en contenedor.
+
+## Ejecucion Con Expo Go
 
 ```powershell
-npm ci
-Copy-Item .env.example .env
+npm install
 npm run start:lan
+```
+
+La app usa las variables del archivo `.env` local de esta carpeta.
+
+## Ejecucion En Docker
+
+Para ejecutar todo el sistema, usar la infraestructura oficial:
+
+```powershell
+docker compose --env-file ..\docker-infra\.env -f ..\docker-infra\docker-compose.yaml up --build
+```
+
+El contenedor del frontend publica la app web en:
+
+```text
+http://localhost:8081
 ```
 
 ## Configuracion
 
-El archivo `.env` no se versiona. Parte de `.env.example` y ajusta estas variables:
+No se debe subir un `.env` real a Git. Para desarrollo local se puede tener un `.env` ignorado por Git.
 
-- `EXPO_PUBLIC_API_URL`: URL base REST o `/api` cuando se use el proxy Nginx.
-- `EXPO_PUBLIC_WS_URL`: URL del WebSocket o `/ws` cuando se use el proxy Nginx.
-- `EXPO_PUBLIC_STUDENT_LINK_BASE_URL`: base para enlaces de estudiantes.
-- `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`: clave de Google Maps para mapas web.
+Variables principales:
 
-## Docker
-
-```powershell
-docker build -t gps-guardian-frontend .
-docker run --rm -p 8081:80 gps-guardian-frontend
-```
-
-El `nginx.conf` reenvia `/api` y `/ws` al host Docker `backend:8080`. Para usar ese proxy, ejecuta el contenedor en una red donde la API se llame `backend`; de lo contrario, configura `EXPO_PUBLIC_API_URL` y `EXPO_PUBLIC_WS_URL` con URLs absolutas antes de compilar.
+- `EXPO_PUBLIC_API_URL`
+- `EXPO_PUBLIC_WS_URL`
+- `EXPO_PUBLIC_STUDENT_LINK_BASE_URL`
+- `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
 
 ## Validacion
 
