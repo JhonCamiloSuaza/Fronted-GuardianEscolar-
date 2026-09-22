@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Modal, Platform, Pressable, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,11 +38,12 @@ function CustomHeader() {
   const { t, lang, setLanguage } = useLanguage();
   const { user } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
+  const headerTextColor = theme.colors.white;
   
   const [isOnline, setIsOnline] = useState(true);
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [selectedLang, setSelectedLang] = useState(lang);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
 
   // ─── Verificar conexión ───
   useEffect(() => {
@@ -114,11 +115,11 @@ function CustomHeader() {
   };
 
   return (
-    <View style={[styles.headerContainer, { backgroundColor: theme.colors.primary, paddingTop: insets.top }]}>
+    <View style={[styles.headerContainer, { backgroundColor: theme.colors.primaryDark, paddingTop: insets.top }]}>
       <View style={styles.header}>
         {/* Marca + Badge LIVE */}
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Text style={[styles.headerBrand, { color: theme.colors.textOnPrimary }]}>{t('appName')}</Text>
+          <Text style={[styles.headerBrand, { color: headerTextColor }]}>{t('appName')}</Text>
           <View style={[styles.connectionBadge, !isOnline && styles.connectionBadgeOffline]}>
             <Animated.View style={[styles.statusDot, { opacity: pulseAnim }, !isOnline && styles.statusDotOffline]} />
             <Text style={styles.statusText}>{isOnline ? t('live') : t('offline')}</Text>
@@ -132,7 +133,7 @@ function CustomHeader() {
               const isActive = pathname === item.route || (item.route === '/(tabs)' && pathname === '/');
               return (
                 <TouchableOpacity key={item.route} onPress={() => router.push(item.route)}>
-                  <Text style={[styles.navLink, isActive && styles.navLinkActive, { color: theme.colors.textOnPrimary }]}>
+                  <Text style={[styles.navLink, isActive && styles.navLinkActive, { color: headerTextColor }]}>
                     {item.label || t(item.labelKey)}
                   </Text>
                 </TouchableOpacity>
@@ -145,23 +146,23 @@ function CustomHeader() {
         <View style={styles.controlsContainer}>
           {/* Toggle Dark Mode */}
           <TouchableOpacity 
-            style={[styles.iconBtn, { borderColor: theme.colors.textOnPrimary + '40' }]}
+            style={[styles.iconBtn, { borderColor: headerTextColor + '40' }]}
             onPress={toggleTheme}
           >
             <MaterialCommunityIcons 
               name={isDark ? 'white-balance-sunny' : 'moon-waning-crescent'} 
               size={18} 
-              color={theme.colors.textOnPrimary}
+              color={headerTextColor}
             />
           </TouchableOpacity>
 
           {/* Selector de Idioma */}
           <TouchableOpacity 
             onPress={() => setLangModalVisible(true)} 
-            style={[styles.globeBtn, { borderColor: theme.colors.textOnPrimary + '40' }]}
+            style={[styles.globeBtn, { borderColor: headerTextColor + '40' }]}
           >
-            <MaterialCommunityIcons name="web" size={16} color={theme.colors.textOnPrimary} />
-            <Text style={[styles.langCode, { color: theme.colors.textOnPrimary }]}>{lang.toUpperCase()}</Text>
+            <MaterialCommunityIcons name="web" size={16} color={headerTextColor} />
+            <Text style={[styles.langCode, { color: headerTextColor }]}>{lang.toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -205,7 +206,7 @@ function CustomHeader() {
             ))}
 
             <TouchableOpacity style={[styles.applyBtn, { backgroundColor: theme.colors.primary }]} onPress={handleApplyLanguage}>
-              <Text style={[styles.applyBtnText, { color: theme.colors.textOnPrimary }]}>{t('langSave')}</Text>
+              <Text style={[styles.applyBtnText, { color: headerTextColor }]}>{t('langSave')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setLangModalVisible(false)} style={{ marginTop: 10, alignItems: 'center' }}>

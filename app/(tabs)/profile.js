@@ -11,6 +11,40 @@ import { authService } from '../../services/auth.service';
 import { notificationService } from '../../services/notification.service';
 import { SUPPORTED_LANGUAGES } from '../../translations';
 import { isValidEmail, isValidPhone, passwordChecks } from '../../utils/validators';
+function ProfileField({ colors, label, value, onChangeText, editable = true, keyboardType = 'default', secureTextEntry = false }) {
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const hidden = secureTextEntry && !passwordVisible;
+
+  return (
+    <View style={styles.inputWrap}>
+      <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput
+        mode="outlined"
+        value={value}
+        onChangeText={onChangeText}
+        editable={editable}
+        keyboardType={keyboardType}
+        secureTextEntry={hidden}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete={secureTextEntry ? 'password' : undefined}
+        textContentType={secureTextEntry ? 'password' : 'none'}
+        dense
+        style={[styles.input, { backgroundColor: editable ? colors.surfaceSecondary : colors.background }]}
+        outlineColor={colors.border}
+        activeOutlineColor={colors.primary}
+        textColor={editable ? colors.text : colors.textSecondary}
+        right={secureTextEntry ? (
+          <TextInput.Icon
+            icon={passwordVisible ? 'eye-off' : 'eye'}
+            onPress={() => setPasswordVisible(current => !current)}
+            forceTextInputFocus={false}
+          />
+        ) : undefined}
+      />
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const { user, logout, updateUserInSession } = useAuth();
@@ -30,6 +64,7 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [passModalVisible, setPassModalVisible] = useState(false);
   const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [twoFAModalVisible, setTwoFAModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const [twoFAEnabled, setTwoFAEnabled] = useState(user?.twoFAEnabled === true);
@@ -107,6 +142,7 @@ export default function ProfileScreen() {
   };
 
   const handleChangeEmail = async () => {
+    setEmailError('');
     if (!isValidEmail(emailForm.nextEmail)) {
       Alert.alert(t('error'), t('authInvalidEmail'));
       return;
@@ -124,7 +160,7 @@ export default function ProfileScreen() {
       setEmailForm({ currentPassword: '', nextEmail });
       Alert.alert(t('success'), t('profileUpdated'));
     } catch (error) {
-      Alert.alert(t('error'), error.message || t('profileUpdateFailed'));
+      setEmailError(error.message || t('profileUpdateFailed'));
     }
   };
 
@@ -221,28 +257,7 @@ export default function ProfileScreen() {
     </View>
   );
 
-  const Field = ({ label, value, onChangeText, editable = true, keyboardType = 'default', secureTextEntry = false }) => (
-    <View style={styles.inputWrap}>
-      <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <TextInput
-        mode="outlined"
-        value={value}
-        onChangeText={onChangeText}
-        editable={editable}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete={secureTextEntry ? 'password' : undefined}
-        textContentType={secureTextEntry ? 'password' : 'none'}
-        dense
-        style={[styles.input, { backgroundColor: editable ? colors.surfaceSecondary : colors.background }]}
-        outlineColor={colors.border}
-        activeOutlineColor={colors.primary}
-        textColor={editable ? colors.text : colors.textSecondary}
-      />
-    </View>
-  );
+
 
   const Requirement = ({ ok, label }) => (
     <View style={styles.checkRow}>
@@ -271,13 +286,13 @@ export default function ProfileScreen() {
           <View style={[styles.profileRow, !isWide && styles.profileRowMobile]}>
             <Avatar.Text size={60} label={form.name.substring(0, 2).toUpperCase()} style={{ backgroundColor: colors.primary }} color={colors.textOnPrimary} />
             <View style={styles.profileInputs}>
-              <Field label={t('profileName')} value={form.name} editable={isEditing} onChangeText={name => setForm(current => ({ ...current, name }))} />
-              <Field label={t('profilePhone')} value={form.phone} editable={isEditing} keyboardType="phone-pad" onChangeText={phone => setForm(current => ({ ...current, phone }))} />
+              <ProfileField colors={colors} label={t('profileName')} value={form.name} editable={isEditing} onChangeText={name => setForm(current => ({ ...current, name }))} />
+              <ProfileField colors={colors} label={t('profilePhone')} value={form.phone} editable={isEditing} keyboardType="phone-pad" onChangeText={phone => setForm(current => ({ ...current, phone }))} />
               <View style={styles.inputWrap}>
                 <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t('profileEmail')}</Text>
                 <View style={styles.emailRow}>
                   <TextInput mode="outlined" value={form.email} editable={false} dense style={[styles.input, styles.emailInput, { backgroundColor: colors.background }]} outlineColor={colors.border} textColor={colors.textSecondary} />
-                  <IconButton icon="pencil-lock-outline" iconColor={colors.primary} onPress={() => { setEmailForm({ currentPassword: '', nextEmail: form.email }); setEmailModalVisible(true); }} />
+                  <IconButton icon="pencil-lock-outline" iconColor={colors.primary} onPress={() => { setEmailForm({ currentPassword: '', nextEmail: form.email }); setEmailError(''); setEmailModalVisible(true); }} />
                 </View>
               </View>
               {isEditing && (
@@ -363,8 +378,9 @@ export default function ProfileScreen() {
               <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profileEmail')}</Text>
               <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setEmailModalVisible(false)} />
             </View>
-            <Field label={t('profileEmail')} value={emailForm.nextEmail} keyboardType="email-address" onChangeText={nextEmail => setEmailForm(current => ({ ...current, nextEmail }))} />
-            <Field label={t('profileCurrentPass')} value={emailForm.currentPassword} secureTextEntry onChangeText={currentPassword => setEmailForm(current => ({ ...current, currentPassword }))} />
+            <ProfileField colors={colors} label={t('profileEmail')} value={emailForm.nextEmail} keyboardType="email-address" onChangeText={nextEmail => setEmailForm(current => ({ ...current, nextEmail }))} />
+            <ProfileField colors={colors} label={t('profileCurrentPass')} value={emailForm.currentPassword} secureTextEntry onChangeText={currentPassword => setEmailForm(current => ({ ...current, currentPassword }))} />
+            {!!emailError && <Text style={[styles.modalError, { color: colors.error }]}>{emailError}</Text>}
             <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} style={styles.modalButton} onPress={handleChangeEmail}>
               {t('profileSave')}
             </Button>
@@ -379,8 +395,8 @@ export default function ProfileScreen() {
               <Text style={[styles.modalTitle, { color: colors.primary }]}>{t('profileChangePass')}</Text>
               <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setPassModalVisible(false)} />
             </View>
-            <Field label={t('profileCurrentPass')} value={passForm.current} secureTextEntry onChangeText={current => setPassForm(prev => ({ ...prev, current }))} />
-            <Field label={t('profileNewPass')} value={passForm.next} secureTextEntry onChangeText={next => setPassForm(prev => ({ ...prev, next }))} />
+            <ProfileField colors={colors} label={t('profileCurrentPass')} value={passForm.current} secureTextEntry onChangeText={current => setPassForm(prev => ({ ...prev, current }))} />
+            <ProfileField colors={colors} label={t('profileNewPass')} value={passForm.next} secureTextEntry onChangeText={next => setPassForm(prev => ({ ...prev, next }))} />
             {passForm.next.length > 0 && (
               <View style={[styles.reqsBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
                 <Requirement ok={passReqs.minLen} label={t('securityMinLength')} />
@@ -390,7 +406,7 @@ export default function ProfileScreen() {
                 <Requirement ok={passReqs.special} label={t('securitySpecial')} />
               </View>
             )}
-            <Field label={t('profileConfirmPass')} value={passForm.confirm} secureTextEntry onChangeText={confirm => setPassForm(prev => ({ ...prev, confirm }))} />
+            <ProfileField colors={colors} label={t('profileConfirmPass')} value={passForm.confirm} secureTextEntry onChangeText={confirm => setPassForm(prev => ({ ...prev, confirm }))} />
             <Button mode="contained" onPress={handleChangePassword} style={styles.modalButton} buttonColor={allPassReqsMet ? colors.primary : colors.border} textColor={allPassReqsMet ? colors.textOnPrimary : colors.textSecondary}>
               {t('profileUpdatePass')}
             </Button>
@@ -428,7 +444,7 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                   {twoFAToken ? (
                     <>
-                      <Field label={t('twoFAEnterCode')} value={twoFACode} keyboardType="number-pad" onChangeText={value => setTwoFACode(value.replace(/\D/g, '').slice(0, 6))} />
+                      <ProfileField colors={colors} label={t('twoFAEnterCode')} value={twoFACode} keyboardType="number-pad" onChangeText={value => setTwoFACode(value.replace(/\D/g, '').slice(0, 6))} />
                       <Button mode="contained" loading={twoFASubmitting} disabled={twoFASubmitting} buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={handleVerify2FA}>
                         {t('twoFAVerifyActivate')}
                       </Button>
@@ -437,7 +453,7 @@ export default function ProfileScreen() {
                 </>
               ) : (
                 <>
-                  <Field label={t('profileCurrentPass')} value={twoFAPassword} secureTextEntry onChangeText={setTwoFAPassword} />
+                  <ProfileField colors={colors} label={t('profileCurrentPass')} value={twoFAPassword} secureTextEntry onChangeText={setTwoFAPassword} />
                   <Button mode="contained" loading={twoFASubmitting} disabled={twoFASubmitting} buttonColor={colors.error} textColor={colors.textOnPrimary} onPress={handleDisable2FA}>
                     {t('twoFADisable')}
                   </Button>
@@ -517,6 +533,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, paddingBottom: 10 },
   modalTitle: { fontSize: 18, fontWeight: 'bold' },
   modalButton: { borderRadius: 8, marginTop: 8 },
+  modalError: { marginTop: 8, marginBottom: 4, fontSize: 13 },
   reqsBox: { borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
   checkLabel: { fontSize: 12 },

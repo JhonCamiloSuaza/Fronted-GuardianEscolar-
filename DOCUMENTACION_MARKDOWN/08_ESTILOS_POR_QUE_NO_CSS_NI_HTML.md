@@ -241,3 +241,7 @@ Expo gestiona automáticamente la carga de la fuente de íconos. No hay que impo
 | ¿Cómo se hacen los íconos? | `MaterialCommunityIcons` de `@expo/vector-icons` |
 | ¿Cómo se hace responsive? | `useWindowDimensions()` + condicionales en JS |
 | ¿Funciona igual en web y móvil? | Sí, con `react-native-web` que "traduce" los componentes al DOM |
+
+## Actualizacion HU-12
+
+Los nuevos controles se implementan con estilos de React Native y React Native Paper. El calendario, la busqueda y los formularios usan dimensiones flexibles, colores del tema, espaciado responsive y estados visuales de error o seleccion.

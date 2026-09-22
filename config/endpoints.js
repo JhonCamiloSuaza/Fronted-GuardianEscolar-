@@ -50,6 +50,11 @@ function isRemoteConfiguredUrl(value) {
   return host && !isLocalHost(host);
 }
 
+function normalizeApiUrl(value) {
+  if (!value || value.startsWith('/')) return value
+  const normalized = value.replace(/\/+$/, '')
+  return normalized.endsWith('/api') ? normalized : `${normalized}/api`
+}
 function isTunnelHost(host) {
   return /\.devtunnels\.ms$/i.test(host) || /\.trycloudflare\.com$/i.test(host);
 }
@@ -60,6 +65,9 @@ function resolveApiUrl() {
   if (configuredUrl?.startsWith('/')) {
     return configuredUrl;
   }
+  if (isRemoteConfiguredUrl(configuredUrl) && !configuredUrl.startsWith('/')) {
+    return normalizeApiUrl(configuredUrl);
+  }
   if (isTunnelHost(currentBrowserHost)) {
     return '/api';
   }
@@ -68,9 +76,9 @@ function resolveApiUrl() {
     return `http://${host}:${apiPort}/api`;
   }
   if (isRemoteConfiguredUrl(configuredUrl)) {
-    return configuredUrl;
+    return normalizeApiUrl(configuredUrl);
   }
-  return configuredUrl || `http://localhost:${apiPort}/api`;
+  return normalizeApiUrl(configuredUrl || `http://localhost:${apiPort}`);
 }
 
 function resolveWsUrl(apiUrl) {
@@ -162,3 +170,7 @@ export const ENDPOINTS = {
   SOCKET_URL: WS_URL,
   SOCKET_TOPIC: (tripId) => `/topic/trips/${tripId}/coordinates`,
 };
+
+
+
+

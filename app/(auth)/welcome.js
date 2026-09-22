@@ -83,12 +83,12 @@ export default function WelcomeScreen() {
     const timer = setInterval(() => {
       setActiveIndex((current) => {
         const next = (current + 1) % slides.length;
-        listRef.current?.scrollToIndex({ index: next, animated: true });
+        listRef.current?.scrollToOffset({ offset: width * next, animated: true });
         return next;
       });
     }, 3500);
     return () => clearInterval(timer);
-  }, [checkingSeen, slides.length]);
+  }, [checkingSeen, slides.length, width]);
 
   const completeOnboarding = async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
@@ -146,6 +146,14 @@ export default function WelcomeScreen() {
           pagingEnabled
           scrollEnabled
           showsHorizontalScrollIndicator={false}
+          getItemLayout={(_, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
+          onScrollToIndexFailed={({ index }) => {
+            listRef.current?.scrollToOffset({ offset: width * index, animated: true });
+          }}
           onMomentumScrollEnd={(event) => {
             const next = Math.round(event.nativeEvent.contentOffset.x / width);
             setActiveIndex(next);
@@ -350,3 +358,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
+
+

@@ -47,13 +47,21 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
   const colors = theme.colors;
   const selectedDate = fromDateKey(value);
   const [visible, setVisible] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [monthDate, setMonthDate] = useState(selectedDate || new Date());
   const days = useMemo(() => getCalendarDays(monthDate), [monthDate]);
 
   const monthLabel = monthDate.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+  const monthOptions = Array.from({ length: 12 }, (_, index) => new Date(2020, index, 1).toLocaleDateString('es-CO', { month: 'long' }));
+  const yearOptions = Array.from({ length: 32 }, (_, index) => new Date().getFullYear() - index);
 
   const changeMonth = (offset) => {
     setMonthDate(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  };
+
+  const selectMonthYear = (month, year) => {
+    setMonthDate(new Date(year, month, 1));
+    setSelectionMode(false);
   };
 
   const selectDate = (date) => {
@@ -85,43 +93,67 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
           <Pressable style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={(event) => event.stopPropagation()}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
               <IconButton icon="chevron-left" iconColor={colors.text} onPress={() => changeMonth(-1)} />
-              <Text style={[styles.monthTitle, { color: colors.text }]}>{monthLabel}</Text>
+              <TouchableOpacity style={styles.monthTitleButton} onPress={() => setSelectionMode(current => !current)}>
+                <Text style={[styles.monthTitle, { color: colors.text }]}>{monthLabel}</Text>
+                <MaterialCommunityIcons name={selectionMode ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
+              </TouchableOpacity>
               <IconButton icon="chevron-right" iconColor={colors.text} onPress={() => changeMonth(1)} />
             </View>
 
-            <View style={styles.weekRow}>
-              {WEEK_DAYS.map(day => (
-                <Text key={day} style={[styles.weekDay, { color: colors.textSecondary }]}>{day}</Text>
-              ))}
-            </View>
-
-            <ScrollView contentContainerStyle={styles.daysGrid}>
-              {days.map((date, index) => {
-                const dateKey = toDateKey(date);
-                const isSelected = value && dateKey === value;
-                return (
-                  <TouchableOpacity
-                    key={`${dateKey || 'empty'}-${index}`}
-                    disabled={!date}
-                    style={[
-                      styles.dayCell,
-                      date && { borderColor: colors.border },
-                      isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                    ]}
-                    onPress={() => selectDate(date)}
-                  >
-                    <Text style={[
-                      styles.dayText,
-                      { color: date ? colors.text : 'transparent' },
-                      isSelected && { color: colors.textOnPrimary, fontWeight: '700' },
-                    ]}>
-                      {date ? date.getDate() : 0}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
+            {selectionMode ? (
+              <View style={styles.selectorPanel}>
+                <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Mes</Text>
+                <View style={styles.monthGrid}>
+                  {monthOptions.map((month, index) => (
+                    <TouchableOpacity
+                      key={month}
+                      style={[styles.optionButton, { borderColor: colors.border }, index === monthDate.getMonth() && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                      onPress={() => selectMonthYear(index, monthDate.getFullYear())}
+                    >
+                      <Text style={[styles.optionText, { color: index === monthDate.getMonth() ? colors.textOnPrimary : colors.text }]}>{month.slice(0, 3)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Año</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.yearRow}>
+                  {yearOptions.map(year => (
+                    <TouchableOpacity
+                      key={year}
+                      style={[styles.yearButton, { borderColor: colors.border }, year === monthDate.getFullYear() && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                      onPress={() => selectMonthYear(monthDate.getMonth(), year)}
+                    >
+                      <Text style={[styles.optionText, { color: year === monthDate.getFullYear() ? colors.textOnPrimary : colors.text }]}>{year}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : (
+              <>
+                <View style={styles.weekRow}>
+                  {WEEK_DAYS.map(day => (
+                    <Text key={day} style={[styles.weekDay, { color: colors.textSecondary }]}>{day}</Text>
+                  ))}
+                </View>
+                <ScrollView contentContainerStyle={styles.daysGrid}>
+                  {days.map((date, index) => {
+                    const dateKey = toDateKey(date);
+                    const isSelected = value && dateKey === value;
+                    return (
+                      <TouchableOpacity
+                        key={`${dateKey || 'empty'}-${index}`}
+                        disabled={!date}
+                        style={[styles.dayCell, date && { borderColor: colors.border }, isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                        onPress={() => selectDate(date)}
+                      >
+                        <Text style={[styles.dayText, { color: date ? colors.text : 'transparent' }, isSelected && { color: colors.textOnPrimary, fontWeight: '700' }]}>
+                          {date ? date.getDate() : 0}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
             <View style={styles.actions}>
               <Button mode="text" textColor={colors.textSecondary} onPress={clearDate}>Limpiar</Button>
               <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={() => setVisible(false)}>Cerrar</Button>
@@ -160,10 +192,10 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: '100%',
-    maxWidth: 380,
+    maxWidth: 460,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 12,
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
@@ -176,6 +208,52 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
     fontSize: 16,
     fontWeight: '700',
+  },
+  monthTitleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  selectorPanel: {
+    paddingBottom: 4,
+  },
+  selectorLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  optionButton: {
+    width: '31.8%',
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yearRow: {
+    gap: 6,
+    paddingBottom: 4,
+  },
+  yearButton: {
+    minWidth: 64,
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  optionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
   weekRow: {
     flexDirection: 'row',

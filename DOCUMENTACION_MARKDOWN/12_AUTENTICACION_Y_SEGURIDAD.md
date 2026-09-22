@@ -273,3 +273,7 @@ El `AuthContext` y todos los componentes UI **no necesitan cambiar**. Solo el se
 | `PARENT` | Acudiente/padre — acceso completo a sus hijos | ✅ Activo |
 | `ADMIN` | Administrador escolar — gestión masiva | 🔄 Preparado (sin UI aún) |
 | `STUDENT` | Vista del estudiante (`student-dashboard.js`) | 🔄 En desarrollo |
+
+## Actualizacion HU-12
+
+Los errores de reautenticacion del perfil se muestran sin cerrar innecesariamente la sesion. La pantalla de verificacion de codigo respeta el modo oscuro y los campos de contraseña permiten controlar su visibilidad sin exponer el valor por defecto.
