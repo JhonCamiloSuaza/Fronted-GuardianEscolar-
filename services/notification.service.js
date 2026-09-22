@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import api from './api';
 
@@ -19,11 +18,16 @@ const getDeviceName = () => {
   return Device.deviceName || `${Device.manufacturer || 'Device'} ${Device.modelName || ''}`.trim();
 };
 
+const isExpoGo = () =>
+  Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+
 export const notificationService = {
   registerPushDevice: async () => {
-    if (Platform.OS === 'web' || !Device.isDevice) {
+    if (Platform.OS === 'web' || !Device.isDevice || isExpoGo()) {
       return null;
     }
+
+    const Notifications = await import('expo-notifications');
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {

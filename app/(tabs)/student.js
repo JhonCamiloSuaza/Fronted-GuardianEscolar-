@@ -17,6 +17,7 @@ import {
 import { Avatar, Button, FAB, Surface, Text } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import { STUDENT_LINK_BASE_URL } from '../../config/endpoints';
+import CalendarDatePicker from '../../components/common/CalendarDatePicker';
 import { COLORS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -37,13 +38,6 @@ const EMPTY_FORM = {
   contacto_telefono: '',
   contacto_parentesco: 'Acudiente',
 };
-
-function formatBirthDateInput(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 8);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-}
 
 function parseValidBirthDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -79,6 +73,7 @@ function formatEmergencyPhoneInput(value) {
 
 export default function StudentScreen() {
   const [students, setStudents] = useState([]);
+  const [studentQuery, setStudentQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null); // null = agregar, obj = editar
   const [form, setForm] = useState(EMPTY_FORM);
@@ -97,6 +92,12 @@ export default function StudentScreen() {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const colors = theme.colors;
+  const filteredStudents = students.filter(student => {
+    const query = studentQuery.trim().toLowerCase();
+    if (!query) return true;
+    return [student.nombre, student.grado, student.colegio, student.contacto_nombre]
+      .some(value => String(value || '').toLowerCase().includes(query));
+  });
   const themed = {
     screen: { backgroundColor: colors.background },
     surface: { backgroundColor: colors.surface, borderColor: colors.border },
@@ -253,7 +254,7 @@ export default function StudentScreen() {
       errors.grado = 'Usa un grado válido, por ejemplo 4, Cuarto o Décimo.';
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.fechaNacimiento)) {
-      errors.fechaNacimiento = 'Escribe solo numeros: AAAAMMDD.';
+      errors.fechaNacimiento = 'Selecciona una fecha válida.';
     } else if (!birthDate || birthDate >= today) {
       errors.fechaNacimiento = 'La fecha de nacimiento debe ser anterior a hoy.';
     } else {
@@ -446,7 +447,7 @@ export default function StudentScreen() {
         </View>
       ) : (
         <FlatList
-          data={students}
+          data={filteredStudents}
           keyExtractor={item => item.id}
           numColumns={isWeb ? 3 : 1}
           key={isWeb ? 'grid' : 'list'}
@@ -459,6 +460,11 @@ export default function StudentScreen() {
             <View style={styles.pageHeader}>
               <Text style={[styles.pageTitle, themed.text]}>{t('studTitle')}</Text>
               <Text style={[styles.pageSubtitle, themed.textSecondary]}>{t('studSubtitle')}</Text>
+              <View style={[styles.searchBox, themed.surfaceSecondary, { borderColor: colors.border }]}>
+                <MaterialCommunityIcons name="magnify" size={20} color={colors.textSecondary} />
+                <TextInput value={studentQuery} onChangeText={setStudentQuery} placeholder={t('studSearch')} placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.text }]} accessibilityLabel={t('studSearch')} />
+                {!!studentQuery && <TouchableOpacity onPress={() => setStudentQuery('')} accessibilityLabel={t('studClearSearch')}><MaterialCommunityIcons name="close-circle" size={18} color={colors.textSecondary} /></TouchableOpacity>}
+              </View>
             </View>
           }
           renderItem={({ item }) => <StudentCard item={item} />}
@@ -500,20 +506,21 @@ export default function StudentScreen() {
                   value={form.nombre}
                   onChangeText={v => setForm(f => ({ ...f, nombre: v }))}
                   placeholder="Nombre y apellido"
+                  maxLength={100}
                   placeholderTextColor={colors.textMuted}
                 />
                 {!!formErrors.nombre && <Text style={styles.errorText}>{formErrors.nombre}</Text>}
 
                 <View style={styles.mockupRow}>
                   <View style={styles.mockupHalfFieldLeft}>
-                    <Text style={[styles.mockupLabel, themed.textSecondary]}>Fecha de nacimiento *</Text>
-                    <TextInput
-                      style={[styles.mockupInput, themed.input, formErrors.fechaNacimiento && styles.inputError]}
+                    <CalendarDatePicker
                       value={form.fechaNacimiento}
-                      onChangeText={v => setForm(f => ({ ...f, fechaNacimiento: formatBirthDateInput(v) }))}
-                      placeholder="AAAAMMDD"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="number-pad"
+                      onChange={fechaNacimiento => {
+                        setForm(f => ({ ...f, fechaNacimiento }));
+                        setFormErrors(current => ({ ...current, fechaNacimiento: undefined }));
+                      }}
+                      label="Fecha de nacimiento *"
+                      placeholder="Seleccionar fecha"
                     />
                     {!!formErrors.fechaNacimiento && <Text style={styles.errorText}>{formErrors.fechaNacimiento}</Text>}
                   </View>
@@ -524,6 +531,7 @@ export default function StudentScreen() {
                       value={form.grado}
                       onChangeText={v => setForm(f => ({ ...f, grado: v }))}
                       placeholder="Ej: Tercero"
+                      maxLength={40}
                       placeholderTextColor={colors.textMuted}
                     />
                     {!!formErrors.grado && <Text style={styles.errorText}>{formErrors.grado}</Text>}
@@ -536,6 +544,7 @@ export default function StudentScreen() {
                   value={form.contacto_nombre}
                   onChangeText={v => setForm(f => ({ ...f, contacto_nombre: v }))}
                   placeholder="Nombre del acudiente o contacto"
+                  maxLength={100}
                   placeholderTextColor={colors.textMuted}
                 />
                 {!!formErrors.contacto_nombre && <Text style={styles.errorText}>{formErrors.contacto_nombre}</Text>}
@@ -708,6 +717,9 @@ const styles = StyleSheet.create({
     gap: 20,
     justifyContent: 'flex-start',
   },
+  searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, marginTop: 14, minHeight: 46 },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 14, paddingVertical: 8 },
+  noResultsText: { textAlign: 'center', marginTop: 18, fontSize: 13 },
   pageHeader: {
     marginBottom: 24,
   },

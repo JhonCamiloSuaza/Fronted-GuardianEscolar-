@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Platform, Text } from 'react-native';
 import { COLORS } from '../constants/colors';
 
 // Diagnóstico de importación seguro para Native/Web
@@ -15,12 +15,8 @@ try {
 
 export default function SafeMap({ children, currentLocation, initialRegion, style, markers = [] }) {
   const webViewRef = useRef(null);
-  const [isMounted, setIsMounted] = useState(false);
   const [hasError, setHasError] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // --- HTML DEL MAPA LIBRE (LEAFLET) ---
   const mapHtml = `
@@ -134,7 +130,7 @@ export default function SafeMap({ children, currentLocation, initialRegion, styl
 
   // --- SINCRO DINAMICA ---
   useEffect(() => {
-    if (isMounted && currentLocation && webViewRef.current) {
+    if (currentLocation && webViewRef.current) {
       const data = { lat: currentLocation.latitude, lng: currentLocation.longitude };
       if (Platform.OS === 'web') {
         webViewRef.current.contentWindow?.postMessage(data, "*");
@@ -142,13 +138,7 @@ export default function SafeMap({ children, currentLocation, initialRegion, styl
         webViewRef.current.postMessage(JSON.stringify(data));
       }
     }
-  }, [currentLocation, isMounted]);
-
-  if (!isMounted) return (
-    <View style={[styles.container, style]}>
-      <ActivityIndicator size="large" color={COLORS.PRIMARIO} />
-    </View>
-  );
+  }, [currentLocation]);
 
   // --- RENDER WEB ---
   if (Platform.OS === 'web') {

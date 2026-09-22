@@ -48,3 +48,7 @@ Esta carpeta documenta el frontend listo para repositorio. El codigo fuente ofic
 ## Nota De Buenas Practicas
 
 Este repositorio debe quedar liviano y reproducible: se sube codigo fuente, configuracion, assets y documentacion; cada desarrollador regenera dependencias con npm y configura sus variables en archivos locales no versionados.
+
+## Actualizacion HU-12
+
+La version documentada incluye mejoras en registro y consulta de hijos, selector directo de mes y año, normalizacion de grados, validaciones, modo oscuro responsive y ajustes de autenticacion. El documento especifico se encuentra en `19_HU_12_MEJORAS_FRONTEND.md` en la raiz del frontend HU12.

@@ -92,7 +92,7 @@ export default function DashboardScreen() {
     <TouchableOpacity
       activeOpacity={0.7}
       onPress={onPress}
-      style={styles.statCardTouch}
+      style={[styles.statCardTouch, screenType === 'wide' && styles.statCardWide, screenType === 'desktop' && styles.statCardDesktop]}
     >
       <Surface 
         style={[
@@ -365,10 +365,12 @@ const styles = StyleSheet.create({
     minWidth: '48%',
     marginBottom: 6,
   },
+  statCardWide: { flexBasis: '23%', minWidth: 220 },
+  statCardDesktop: { flexBasis: '48%', minWidth: 280 },
   statCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     borderRadius: 10,
     borderWidth: 1,
     minHeight: 80,
@@ -379,8 +381,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   statIcon: {
-    width: 48,
-    height: 48,
+    width: 54,
+    height: 54,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
