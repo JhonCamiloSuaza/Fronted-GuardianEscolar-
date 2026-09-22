@@ -236,3 +236,7 @@ Protocolo de comunicación que mantiene una conexión persistente bidireccional 
 
 ### `useNativeDriver`
 Propiedad de las animaciones de React Native. Cuando es `true`, transfiere la animación al hilo nativo de UI (fuera del hilo JS), garantizando 60fps independientemente de la carga del código JavaScript.
+
+## Actualizacion HU-12
+
+Nuevos terminos relevantes: `CalendarDatePicker` para seleccionar fechas, `normalizeGrade` para convertir grados a enums, `studentQuery` para filtrar hijos y `EXPO_UNSTABLE_TUNNEL_V2` para conectar el frontend mediante el tunel de Expo.

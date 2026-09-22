@@ -394,3 +394,7 @@ Notificaciones push  → expo-notifications + expo-device
 Soporte web          → react-native-web + react-dom
 Idioma               → (solución propia) LanguageContext + AsyncStorage
 ```
+
+## Actualizacion HU-12
+
+La HU-12 utiliza las dependencias ya existentes del proyecto: Expo SDK 57, Expo Router, React Native Paper, MaterialCommunityIcons, AsyncStorage y los servicios de la aplicacion. No se agregan dependencias nuevas para el selector de fecha.

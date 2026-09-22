@@ -282,3 +282,7 @@ app/(auth)/login.js
   ├── hooks/useAuth.js
   └── contexts/AuthContext.js
 ```
+
+## Actualizacion HU-12
+
+El formulario mantiene el estado local mientras se registra o edita un hijo. Antes de enviar, `normalizeGrade` convierte el grado a su enum estable y se validan los campos. La lista usa `studentQuery` para filtrar resultados y vuelve a cargar los datos despues de guardar o eliminar.
