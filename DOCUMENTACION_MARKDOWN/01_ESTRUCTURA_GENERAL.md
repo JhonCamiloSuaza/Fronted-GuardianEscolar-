@@ -115,7 +115,3 @@ npx expo export --platform web
 ```
 
 Luego eliminar nuevamente carpetas generadas si se preparara el paquete para subir manualmente.
-
-## Actualizacion HU-12
-
-La estructura actual del frontend incluye las pantallas de autenticacion y navegacion por Expo Router, los modulos de hijos, perfil, seguimiento, zonas, historial y notificaciones, ademas de componentes reutilizables como `CalendarDatePicker`. La historia tambien incorpora utilidades para normalizar grados, validar formularios y mantener el estado de los hijos.

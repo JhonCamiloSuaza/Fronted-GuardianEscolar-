@@ -279,7 +279,3 @@ const t = useCallback((key) => {
 | `app/_layout.js` | Guard Pattern |
 | `app/(tabs)/history.js` | Compound Component (StatCard), Optimistic Update |
 | `components/SafeMap.js` | Strategy Pattern (selección de implementación por plataforma) |
-
-## Actualizacion HU-12
-
-Se aplican componentes reutilizables, estado local para formularios y filtros derivados para la busqueda. La normalizacion de grados centraliza reglas de entrada y el calendario encapsula la seleccion de fechas para mantener una interfaz consistente.

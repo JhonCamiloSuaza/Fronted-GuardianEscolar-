@@ -308,6 +308,7 @@ export default function StudentScreen() {
         updated = await addStudent(dataToSave);
       }
       setStudents(updated);
+      await loadStudents();
       setModalVisible(false);
     } catch (error) {
       Alert.alert(t('error'), error.message || 'No se pudo guardar el estudiante.');
@@ -519,8 +520,8 @@ export default function StudentScreen() {
                         setForm(f => ({ ...f, fechaNacimiento }));
                         setFormErrors(current => ({ ...current, fechaNacimiento: undefined }));
                       }}
-                      label="Fecha de nacimiento *"
-                      placeholder="Seleccionar fecha"
+                      label={`${t('calendarBirthDate')} *`}
+                      placeholder={t('calendarSelectDate')}
                     />
                     {!!formErrors.fechaNacimiento && <Text style={styles.errorText}>{formErrors.fechaNacimiento}</Text>}
                   </View>
@@ -694,6 +695,9 @@ export default function StudentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
     backgroundColor: COLORS.FONDO_PRINCIPAL,
   },
   list: {
