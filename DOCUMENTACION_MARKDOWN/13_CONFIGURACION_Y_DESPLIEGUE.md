@@ -149,7 +149,3 @@ npx expo start --dev-client --tunnel --clear --port 8082
 ```
 
 Escanea el QR con el development build. La URL de `EXPO_PUBLIC_API_URL` corresponde al backend; la URL del tunel de Expo solo sirve para descargar el bundle del frontend.
-
-## Actualizacion HU-12
-
-El frontend conserva `eas.json` para development builds y `nginx.conf` para servir la version web con Docker. El tunel de Expo usa `EXPO_UNSTABLE_TUNNEL_V2=1` mediante `npm run start:tunnel`, con el puerto Metro 8082.

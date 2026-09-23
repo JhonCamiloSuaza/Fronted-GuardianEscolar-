@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Modal, Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Avatar, Button, Divider, IconButton, Surface, Switch, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,6 +15,27 @@ function ProfileField({ colors, label, value, onChangeText, editable = true, key
   const [passwordVisible, setPasswordVisible] = useState(false);
   const hidden = secureTextEntry && !passwordVisible;
 
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const styleId = 'guardian-profile-autofill-theme';
+    let style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent = `
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus {
+        -webkit-text-fill-color: ${colors.text};
+        -webkit-box-shadow: 0 0 0 1000px ${colors.surfaceSecondary} inset;
+        caret-color: ${colors.text};
+        transition: background-color 9999s ease-in-out 0s;
+      }
+    `;
+  }, [colors]);
+
   return (
     <View style={styles.inputWrap}>
       <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
@@ -27,8 +48,8 @@ function ProfileField({ colors, label, value, onChangeText, editable = true, key
         secureTextEntry={hidden}
         autoCapitalize="none"
         autoCorrect={false}
-        autoComplete={secureTextEntry ? 'password' : undefined}
-        textContentType={secureTextEntry ? 'password' : 'none'}
+        autoComplete={secureTextEntry ? 'off' : undefined}
+        textContentType="none"
         dense
         style={[styles.input, { backgroundColor: editable ? colors.surfaceSecondary : colors.background }]}
         outlineColor={colors.border}

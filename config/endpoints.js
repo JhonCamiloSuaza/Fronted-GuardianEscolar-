@@ -108,11 +108,24 @@ function resolveStudentLinkBaseUrl(apiUrl) {
   const configuredUrl = process.env.EXPO_PUBLIC_STUDENT_LINK_BASE_URL;
   const origin = browserOrigin();
   const currentBrowserHost = browserHost();
+  // QR links must point to the public frontend origin, never to the API
+  // tunnel with a manually appended local frontend port.
+  if (Platform.OS === 'web' && origin && currentBrowserHost && !isLocalHost(currentBrowserHost)) {
+    return origin;
+  }
   if (configuredUrl?.startsWith('/')) {
     return configuredUrl;
   }
   if (isTunnelHost(currentBrowserHost) && origin) {
     return origin;
+  }
+  // Expo Go must use the currently running public project host. A QR code
+  // built from localhost or an old tunnel opens a gateway error on mobile.
+  if (Platform.OS !== 'web') {
+    const nativeProjectHost = expoHost();
+    if (nativeProjectHost && (/\.on\.expo\.app$|\.exp\.direct$|\.devtunnels\.ms$/i.test(nativeProjectHost))) {
+      return `https://${nativeProjectHost}`;
+    }
   }
   if (isRemoteConfiguredUrl(configuredUrl)) {
     return configuredUrl;
