@@ -204,7 +204,3 @@ npx expo start -c
 - **Versión de la App:** 1.0.0
 - **Nombre del paquete:** `gps-guardian-escolar`
 - **Plataforma base:** Expo SDK 55 / React Native 0.83.4 / React 19.2
-
-## Actualizacion HU-12
-
-El frontend permite registrar, editar, consultar y eliminar hijos. Tambien permite seleccionar fechas de nacimiento sin digitacion manual, validar la edad, consultar la lista mediante busqueda y conservar el grado con un valor estable independiente del idioma visible.
