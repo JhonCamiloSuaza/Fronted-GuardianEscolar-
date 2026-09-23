@@ -145,11 +145,6 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={28} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.cardWrapper}>
@@ -346,17 +341,6 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  topBar: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    zIndex: 10,
-  },
-  backButton: {
-    padding: 8,
-  },
   scrollContent: { flexGrow: 1, justifyContent: 'center' },
   cardWrapper: { width: '100%', alignItems: 'center', padding: 20, alignSelf: 'center' },
   headerLogo: { width: 120, height: 120, marginBottom: 6 },

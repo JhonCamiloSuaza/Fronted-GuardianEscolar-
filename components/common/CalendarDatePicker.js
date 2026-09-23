@@ -1,10 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Button, IconButton, Text } from 'react-native-paper';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Button, IconButton, Text, TextInput } from 'react-native-paper';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
-const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const LOCALES = { es: 'es-CO', en: 'en-US', fr: 'fr-FR', pt: 'pt-BR' };
+const WEEK_DAYS = {
+  es: ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'],
+  en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+  fr: ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'],
+  pt: ['Se', 'Te', 'Qu', 'Qu', 'Se', 'Sa', 'Do'],
+};
 
 function pad(value) {
   return String(value).padStart(2, '0');
@@ -42,18 +49,33 @@ function getCalendarDays(monthDate) {
   return days;
 }
 
-export default function CalendarDatePicker({ value, onChange, label, placeholder = 'Seleccionar fecha' }) {
+export default function CalendarDatePicker({ value, onChange, label, placeholder }) {
   const { theme } = useTheme();
+  const { lang, t } = useLanguage();
   const colors = theme.colors;
+  const { width } = useWindowDimensions();
   const selectedDate = fromDateKey(value);
   const [visible, setVisible] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(Platform.OS === 'web' && width >= 700);
   const [monthDate, setMonthDate] = useState(selectedDate || new Date());
+  const [yearDraft, setYearDraft] = useState(String((selectedDate || new Date()).getFullYear()));
+  const [yearPage, setYearPage] = useState(Math.floor(((selectedDate || new Date()).getFullYear() - 1900) / 12));
   const days = useMemo(() => getCalendarDays(monthDate), [monthDate]);
 
-  const monthLabel = monthDate.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
-  const monthOptions = Array.from({ length: 12 }, (_, index) => new Date(2020, index, 1).toLocaleDateString('es-CO', { month: 'long' }));
-  const yearOptions = Array.from({ length: 32 }, (_, index) => new Date().getFullYear() - index);
+  const locale = LOCALES[lang] || LOCALES.es;
+  const weekDays = WEEK_DAYS[lang] || WEEK_DAYS.es;
+  const monthLabel = monthDate.toLocaleDateString(locale, { month: 'long' });
+  const yearLabel = String(monthDate.getFullYear());
+  const monthOptions = Array.from({ length: 12 }, (_, index) => new Date(2020, index, 1).toLocaleDateString(locale, { month: 'long' }));
+  const yearStart = 1900 + yearPage * 12;
+  const yearOptions = Array.from({ length: 12 }, (_, index) => yearStart + index);
+
+  const openPicker = () => {
+    setSelectionMode(Platform.OS === 'web' && width >= 700);
+    setYearDraft(String(monthDate.getFullYear()));
+    setYearPage(Math.floor((monthDate.getFullYear() - 1900) / 12));
+    setVisible(true);
+  };
 
   const changeMonth = (offset) => {
     setMonthDate(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
@@ -61,7 +83,21 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
 
   const selectMonthYear = (month, year) => {
     setMonthDate(new Date(year, month, 1));
+    setYearDraft(String(year));
+    setYearPage(Math.floor((year - 1900) / 12));
     setSelectionMode(false);
+  };
+
+  const changeYearDraft = (text) => {
+    const digits = text.replace(/[^0-9]/g, '').slice(0, 4);
+    setYearDraft(digits);
+    if (digits.length === 4) {
+      const year = Number(digits);
+      if (year >= 1900 && year <= new Date().getFullYear()) {
+        setMonthDate(current => new Date(year, current.getMonth(), 1));
+        setYearPage(Math.floor((year - 1900) / 12));
+      }
+    }
   };
 
   const selectDate = (date) => {
@@ -79,12 +115,12 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
       {label ? <Text style={[styles.label, { color: colors.text }]}>{label}</Text> : null}
       <TouchableOpacity
         style={[styles.trigger, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        onPress={() => setVisible(true)}
+        onPress={openPicker}
         activeOpacity={0.8}
       >
         <MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.primary} />
         <Text style={[styles.triggerText, { color: value ? colors.text : colors.textSecondary }]}>
-          {value || placeholder}
+          {value || placeholder || t('calendarSelectDate')}
         </Text>
       </TouchableOpacity>
 
@@ -93,16 +129,22 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
           <Pressable style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={(event) => event.stopPropagation()}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
               <IconButton icon="chevron-left" iconColor={colors.text} onPress={() => changeMonth(-1)} />
-              <TouchableOpacity style={styles.monthTitleButton} onPress={() => setSelectionMode(current => !current)}>
-                <Text style={[styles.monthTitle, { color: colors.text }]}>{monthLabel}</Text>
-                <MaterialCommunityIcons name={selectionMode ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
-              </TouchableOpacity>
+              <View style={styles.headerSelectors}>
+                <TouchableOpacity style={styles.selectorButton} onPress={() => setSelectionMode(true)}>
+                  <Text style={[styles.monthTitle, { color: colors.text }]}>{monthLabel}</Text>
+                  <MaterialCommunityIcons name="chevron-down" size={16} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.selectorButton} onPress={() => setSelectionMode(true)}>
+                  <Text style={[styles.monthTitle, { color: colors.text }]}>{yearLabel}</Text>
+                  <MaterialCommunityIcons name="chevron-down" size={16} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
               <IconButton icon="chevron-right" iconColor={colors.text} onPress={() => changeMonth(1)} />
             </View>
 
             {selectionMode ? (
               <View style={styles.selectorPanel}>
-                <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Mes</Text>
+                <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>{t('calendarMonth')}</Text>
                 <View style={styles.monthGrid}>
                   {monthOptions.map((month, index) => (
                     <TouchableOpacity
@@ -114,8 +156,24 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Año</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.yearRow}>
+                <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>{t('calendarYear')}</Text>
+                <View style={styles.yearControls}>
+                  <IconButton icon="chevron-left" size={20} iconColor={colors.text} onPress={() => setYearPage(page => Math.max(0, page - 1))} />
+                  <TextInput
+                    mode="outlined"
+                    value={yearDraft}
+                    onChangeText={changeYearDraft}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    style={styles.yearInput}
+                    textColor={colors.text}
+                    outlineColor={colors.border}
+                    activeOutlineColor={colors.primary}
+                    dense
+                  />
+                  <IconButton icon="chevron-right" size={20} iconColor={colors.text} onPress={() => setYearPage(page => page + 1)} />
+                </View>
+                <View style={styles.yearGrid}>
                   {yearOptions.map(year => (
                     <TouchableOpacity
                       key={year}
@@ -125,12 +183,12 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
                       <Text style={[styles.optionText, { color: year === monthDate.getFullYear() ? colors.textOnPrimary : colors.text }]}>{year}</Text>
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
+                </View>
               </View>
             ) : (
               <>
                 <View style={styles.weekRow}>
-                  {WEEK_DAYS.map(day => (
+                  {weekDays.map(day => (
                     <Text key={day} style={[styles.weekDay, { color: colors.textSecondary }]}>{day}</Text>
                   ))}
                 </View>
@@ -155,8 +213,8 @@ export default function CalendarDatePicker({ value, onChange, label, placeholder
               </>
             )}
             <View style={styles.actions}>
-              <Button mode="text" textColor={colors.textSecondary} onPress={clearDate}>Limpiar</Button>
-              <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={() => setVisible(false)}>Cerrar</Button>
+              <Button mode="text" textColor={colors.textSecondary} onPress={clearDate}>{t('calendarClear')}</Button>
+              <Button mode="contained" buttonColor={colors.primary} textColor={colors.textOnPrimary} onPress={() => setVisible(false)}>{t('calendarClose')}</Button>
             </View>
           </Pressable>
         </Pressable>
@@ -204,15 +262,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     marginBottom: 10,
   },
+  headerSelectors: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 18,
+  },
   monthTitle: {
     textTransform: 'capitalize',
     fontSize: 16,
     fontWeight: '700',
   },
-  monthTitleButton: {
+  selectorButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   selectorPanel: {
     paddingBottom: 4,
@@ -237,12 +305,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  yearRow: {
+  yearControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  yearInput: {
+    width: 100,
+    height: 40,
+    textAlign: 'center',
+  },
+  yearGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     paddingBottom: 4,
   },
   yearButton: {
-    minWidth: 64,
+    width: '31.8%',
     minHeight: 36,
     borderWidth: 1,
     borderRadius: 8,
@@ -271,12 +352,12 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: `${100 / 7}%`,
-    aspectRatio: 1,
-    borderWidth: 1,
+    minHeight: 42,
+    borderWidth: 0,
     borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 24,
   },
   dayText: {
     fontSize: 13,

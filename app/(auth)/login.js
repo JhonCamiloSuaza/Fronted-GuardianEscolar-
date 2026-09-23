@@ -166,7 +166,7 @@ export default function LoginScreen() {
                     <View style={styles.checkboxContainer}>
                       <Checkbox status={rememberMe ? 'checked' : 'unchecked'} onPress={handleRememberToggle} color={colors.primary} />
                       <TouchableOpacity onPress={handleRememberToggle}>
-                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>{t('authRemember')}</Text>
+                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>Recordarme</Text>
                       </TouchableOpacity>
                     </View>
                     <TouchableOpacity

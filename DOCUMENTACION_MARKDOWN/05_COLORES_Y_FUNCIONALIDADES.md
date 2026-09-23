@@ -216,7 +216,3 @@ La identidad visual de Guardian Escolar sigue la regla **60-30-10**:
 - **Bordes:** Redondeados (border-radius 8-16px) para un aspecto moderno.
 - **Sombras:** Elevación sutil en tarjetas para profundidad visual.
 - **Animaciones:** Punto LIVE parpadeante, transiciones de pantallas, estados de carga.
-
-## Actualizacion HU-12
-
-Se ajusto la experiencia responsive de las tarjetas del inicio y se mejoro el contraste del modo oscuro. La barra de navegacion usa azul oscuro con texto blanco y los modales, formularios y verificacion de codigo aplican colores del tema activo.

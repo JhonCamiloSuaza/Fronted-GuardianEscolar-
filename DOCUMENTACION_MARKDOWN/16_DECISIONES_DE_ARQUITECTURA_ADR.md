@@ -166,7 +166,3 @@ login: async (email, password) => {
 
 **Consecuencias positivas:** Simplicidad. Siempre datos frescos. Sin sincronización de estado.  
 **Consecuencias negativas:** Lectura de AsyncStorage en cada foco (generalmente < 20ms, aceptable). Si los datos fueran del servidor, habría demasiados requests.
-
-## Actualizacion HU-12
-
-Se mantiene la decision de guardar enums estables en la API y resolver las etiquetas en la interfaz. Tambien se decidio usar un componente propio basado en React Native para seleccionar fechas, evitando depender de una libreria adicional y permitiendo adaptar el modo oscuro.

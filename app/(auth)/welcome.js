@@ -2,10 +2,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_LANGUAGES } from '../../translations';
@@ -18,7 +18,6 @@ export default function WelcomeScreen() {
   const { t, lang, setLanguage } = useLanguage();
   const { theme } = useTheme();
   const colors = theme.colors;
-  const listRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [checkingSeen, setCheckingSeen] = useState(true);
   const [langModalVisible, setLangModalVisible] = useState(false);
@@ -78,22 +77,27 @@ export default function WelcomeScreen() {
     })();
   }, [router]);
 
+  const completeOnboarding = useCallback(async () => {
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    router.replace('/(auth)/register');
+  }, [router]);
+
+  const advanceSlide = useCallback(() => {
+    setActiveIndex((current) => {
+      if (current >= slides.length - 1) {
+        completeOnboarding();
+        return current;
+      }
+      const next = current + 1;
+      return next;
+    });
+  }, [completeOnboarding, slides.length]);
+
   useEffect(() => {
     if (checkingSeen) return undefined;
-    const timer = setInterval(() => {
-      setActiveIndex((current) => {
-        const next = (current + 1) % slides.length;
-        listRef.current?.scrollToOffset({ offset: width * next, animated: true });
-        return next;
-      });
-    }, 3500);
+    const timer = setInterval(advanceSlide, 3500);
     return () => clearInterval(timer);
-  }, [checkingSeen, slides.length, width]);
-
-  const completeOnboarding = async () => {
-    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    router.replace('/(auth)/login');
-  };
+  }, [advanceSlide, checkingSeen]);
 
   const renderLangItem = ({ item }) => {
     const isSelected = lang === item.code;
@@ -125,6 +129,8 @@ export default function WelcomeScreen() {
     return <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} />;
   }
 
+  const activeSlide = slides[activeIndex] || slides[0];
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.topBar}>
@@ -138,46 +144,22 @@ export default function WelcomeScreen() {
 
       <View style={styles.container}>
         <Image source={require('../../assets/images/logo.png')} style={styles.logo} contentFit="contain" />
-        <FlatList
-          ref={listRef}
-          data={slides}
-          keyExtractor={(item) => item.icon}
-          horizontal
-          pagingEnabled
-          scrollEnabled
-          showsHorizontalScrollIndicator={false}
-          getItemLayout={(_, index) => ({
-            length: width,
-            offset: width * index,
-            index,
-          })}
-          onScrollToIndexFailed={({ index }) => {
-            listRef.current?.scrollToOffset({ offset: width * index, animated: true });
-          }}
-          onMomentumScrollEnd={(event) => {
-            const next = Math.round(event.nativeEvent.contentOffset.x / width);
-            setActiveIndex(next);
-            setExpanded(false);
-          }}
-          renderItem={({ item }) => (
-            <View style={[styles.slide, { width }]}>
-              <MaterialCommunityIcons name={item.icon} size={44} color={colors.primary} />
-              <Text style={[styles.slideTitle, { color: colors.text }]}>{item.title}</Text>
-              <Text style={[styles.slideText, { color: colors.textSecondary }]}>{item.text}</Text>
-              <TouchableOpacity
-                style={[styles.detailButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                onPress={() => setExpanded(value => !value)}
-                accessibilityRole="button"
-                accessibilityLabel={expanded ? 'Contraer detalle' : 'Expandir detalle'}
-              >
-                <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={24} color={colors.primary} />
-              </TouchableOpacity>
-              {expanded ? (
-                <Text style={[styles.detailText, { color: colors.textSecondary }]}>{item.detail}</Text>
-              ) : null}
-            </View>
-          )}
-        />
+        <View style={[styles.slide, { width }]} key={activeSlide.icon}>
+          <MaterialCommunityIcons name={activeSlide.icon} size={44} color={colors.primary} />
+          <Text style={[styles.slideTitle, { color: colors.text }]}>{activeSlide.title}</Text>
+          <Text style={[styles.slideText, { color: colors.textSecondary }]}>{activeSlide.text}</Text>
+          <TouchableOpacity
+            style={[styles.detailButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            onPress={() => setExpanded(value => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Contraer detalle' : 'Expandir detalle'}
+          >
+            <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={24} color={colors.primary} />
+          </TouchableOpacity>
+          {expanded ? (
+            <Text style={[styles.detailText, { color: colors.textSecondary }]}>{activeSlide.detail}</Text>
+          ) : null}
+        </View>
 
         <View style={styles.indicators}>
           {slides.map((item, index) => (
@@ -191,16 +173,6 @@ export default function WelcomeScreen() {
           ))}
         </View>
 
-        <View style={styles.skipRow}>
-          <Button
-            mode="text"
-            textColor={colors.primary}
-            onPress={completeOnboarding}
-            compact
-          >
-            {t('live') === 'Live' ? 'Skip' : 'Omitir'}
-          </Button>
-        </View>
       </View>
 
       <Modal visible={langModalVisible} transparent animationType="fade" onRequestClose={() => setLangModalVisible(false)}>

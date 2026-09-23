@@ -1,6 +1,6 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -41,6 +41,31 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previous = {
+      htmlWidth: html.style.width,
+      bodyMargin: body.style.margin,
+      bodyWidth: body.style.width,
+      bodyOverflowX: body.style.overflowX,
+    };
+
+    html.style.width = '100%';
+    body.style.margin = '0';
+    body.style.width = '100%';
+    body.style.overflowX = 'hidden';
+
+    return () => {
+      html.style.width = previous.htmlWidth;
+      body.style.margin = previous.bodyMargin;
+      body.style.width = previous.bodyWidth;
+      body.style.overflowX = previous.bodyOverflowX;
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>
