@@ -353,7 +353,3 @@ Animated.loop(
 ```
 
 `useNativeDriver: true` es crítico — hace que la animación corra en el hilo nativo de UI, no en el hilo JavaScript, garantizando 60fps sin bloquear interacciones.
-
-## Actualizacion HU-12
-
-Las mejoras de esta historia no cambian la logica GPS ni WebSocket. Se mantienen los servicios de seguimiento y vinculacion de dispositivos, mientras que el registro de hijos prepara datos consistentes para las funciones de rastreo posteriores.

@@ -339,7 +339,3 @@ assets/
     ├── android-icon-*.png  ← Íconos adaptativos de Android
     └── tutorial-web.png    ← Imagen del tutorial web
 ```
-
-## Actualizacion HU-12
-
-Los servicios de estudiantes y autenticacion se mantienen separados de las pantallas. Las utilidades centralizan la normalizacion de grados y los componentes comunes concentran controles reutilizables para evitar duplicacion.

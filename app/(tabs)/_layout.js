@@ -242,17 +242,28 @@ function TabLayoutInner() {
           borderTopColor: theme.colors.border,
           elevation: 8,
           backgroundColor: theme.colors.surface,
-          height: 64 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
-          paddingTop: 10,
+          height: 78 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 7,
+          paddingTop: 6,
         } : {
           display: 'none', // ← Oculta en desktop/wide
+        },
+        tabBarLabelStyle: {
+          fontSize: screenType === 'mobile' ? 10 : 11,
+          lineHeight: 14,
+          fontWeight: '600',
+          marginBottom: 0,
+        },
+        tabBarItemStyle: {
+          minWidth: screenType === 'mobile' ? 52 : 72,
+          justifyContent: 'center',
         },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: t('tabDashboard'),
+          tabBarLabel: t('tabDashboard'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="view-dashboard-outline" color={color} size={size} />
           ),
@@ -272,6 +283,7 @@ function TabLayoutInner() {
         name="student"
         options={{
           title: t('tabStudent'),
+          tabBarLabel: t('tabStudent'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-school" color={color} size={size} />
           ),
@@ -281,6 +293,7 @@ function TabLayoutInner() {
         name="notifications"
         options={{
           title: t('tabNotifications'),
+          tabBarLabel: t('tabNotifications'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="bell-outline" color={color} size={size} />
           ),
@@ -290,6 +303,7 @@ function TabLayoutInner() {
         name="tracking"
         options={{
           title: t('tabTracking'),
+          tabBarLabel: t('tabTracking'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="map-search-outline" color={color} size={size} />
           ),
@@ -299,6 +313,7 @@ function TabLayoutInner() {
         name="history"
         options={{
           title: t('tabHistory'),
+          tabBarLabel: t('tabHistory'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="history" color={color} size={size} />
           ),
@@ -308,6 +323,7 @@ function TabLayoutInner() {
         name="zones"
         options={{
           title: t('tabZones'),
+          tabBarLabel: t('tabZones'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="map-marker-path" color={color} size={size} />
           ),
@@ -317,6 +333,7 @@ function TabLayoutInner() {
         name="profile"
         options={{
           title: t('tabProfile'),
+          tabBarLabel: t('tabProfile'),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-circle-outline" color={color} size={size} />
           ),
