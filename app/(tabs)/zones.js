@@ -5,14 +5,24 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { COLORS } from '../../constants/colors';
 import SafeMap from '../../components/SafeMap';
-import { getStudents, addZone, updateZone, deleteZone, getInitials, addRoute, updateRoute, deleteRoute } from '../../utils/studentStorage';
+import { getStudents, getInitials } from '../../utils/studentStorage';
+import { safeZoneService } from '../../services/safe-zone.service';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const isWeb = width > 768;
 
-const EMPTY_ZONE = { name: '', type: 'Personalizado', address: '', radius: '100 Metros', color: COLORS.PRIMARIO };
+const EMPTY_ZONE = {
+  name: '',
+  type: 'Personalizado',
+  address: '',
+  radius: '',
+  latitude: '',
+  longitude: '',
+  inactivityAlertSeconds: '300',
+  color: COLORS.PRIMARIO,
+};
 const VALID_ZONE_TYPES = ['Casa', 'Escuela', 'Personalizado'];
 
 function parseRadiusMeters(value = '') {
@@ -25,18 +35,20 @@ function normalizeZoneForm(zone) {
   return {
     ...zone,
     name: zone.name.trim(),
-    address: zone.address.trim(),
+    address: zone.address?.trim() || '',
     radius: `${radius} Metros`,
     type: VALID_ZONE_TYPES.includes(zone.type) ? zone.type : 'Personalizado',
   };
 }
 
-function normalizeRouteForm(route) {
+function mapBackendZone(zone) {
   return {
-    ...route,
-    name: route.name.trim(),
-    start: route.start.trim(),
-    end: route.end.trim(),
+    ...zone,
+    name: zone.zoneName,
+    type: 'Personalizado',
+    address: `${zone.latitude}, ${zone.longitude}`,
+    radius: `${zone.radiusMeters} Metros`,
+    color: COLORS.PRIMARIO,
   };
 }
 
@@ -55,21 +67,22 @@ export default function ZonesScreen() {
   };
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [safeZones, setSafeZones] = useState([]);
   const [activeTab, setActiveTab] = useState('zones'); // 'zones' or 'routes'
   
   const [modalVisible, setModalVisible] = useState(false);
   const [editingZone, setEditingZone] = useState(null);
   const [form, setForm] = useState(EMPTY_ZONE);
 
-  const [modalRouteVisible, setModalRouteVisible] = useState(false);
-  const [editingRoute, setEditingRoute] = useState(null);
-  const EMPTY_ROUTE = { name: '', start: '', end: '' };
-  const [routeForm, setRouteForm] = useState(EMPTY_ROUTE);
-
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
-    const data = await getStudents();
+    const [data, backendZones] = await Promise.all([
+      getStudents(),
+      safeZoneService.list(),
+    ]);
+    const zones = backendZones.map(mapBackendZone);
+    setSafeZones(zones);
     setStudents(data);
     setSelectedStudent(prev => {
       if (prev) {
@@ -97,13 +110,13 @@ export default function ZonesScreen() {
 
   function openEditZone(zone) {
     setEditingZone(zone);
-    setForm(zone);
+    setForm({ ...zone, inactivityAlertSeconds: String(zone.inactivityAlertSeconds || 300) });
     setModalVisible(true);
   }
 
   async function handleSaveZone() {
     const radius = parseRadiusMeters(form.radius);
-    if (!form.name.trim() || !form.address.trim()) {
+    if (!form.name.trim()) {
       Alert.alert(t('zonesRequiredFields'), t('zonesRequiredZoneMsg'));
       return;
     }
@@ -111,8 +124,16 @@ export default function ZonesScreen() {
       Alert.alert(t('zonesRequiredFields'), 'El nombre de la zona debe tener entre 2 y 100 caracteres.');
       return;
     }
-    if (form.address.trim().length < 5 || form.address.trim().length > 160) {
-      Alert.alert(t('zonesRequiredFields'), 'La dirección debe tener entre 5 y 160 caracteres.');
+    const latitude = Number(form.latitude);
+    const longitude = Number(form.longitude);
+    const inactivityAlertSeconds = Number(form.inactivityAlertSeconds);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+      || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      Alert.alert(t('zonesRequiredFields'), 'Selecciona una ubicación válida en el mapa o ingresa coordenadas válidas.');
+      return;
+    }
+    if (!Number.isInteger(inactivityAlertSeconds) || inactivityAlertSeconds <= 0 || inactivityAlertSeconds > 86400) {
+      Alert.alert(t('zonesRequiredFields'), 'El tiempo de inactividad debe estar entre 1 y 86400 segundos.');
       return;
     }
     if (!Number.isInteger(radius) || radius < 10 || radius > 50000) {
@@ -123,12 +144,30 @@ export default function ZonesScreen() {
     setLoading(true);
     try {
       if (editingZone) {
-        await updateZone(selectedStudent.id, editingZone.id, payload);
+        const updated = await safeZoneService.update(editingZone.id, {
+          studentId: selectedStudent.id,
+          zoneName: payload.name,
+          latitude,
+          longitude,
+          radiusMeters: radius,
+          inactivityAlertSeconds,
+        });
+        setSafeZones(current => current.map(zone => zone.id === editingZone.id ? mapBackendZone(updated) : zone));
       } else {
-        await addZone(selectedStudent.id, payload);
+        const created = await safeZoneService.create({
+          studentId: selectedStudent.id,
+          zoneName: payload.name,
+          latitude,
+          longitude,
+          radiusMeters: radius,
+          inactivityAlertSeconds,
+        });
+        setSafeZones(current => [...current, mapBackendZone(created)]);
       }
-      await loadData();
       setModalVisible(false);
+      Alert.alert(t('live') === 'Live' ? 'Success' : 'Éxito', editingZone ? 'Zona actualizada.' : 'Zona creada.');
+    } catch (error) {
+      Alert.alert(t('error'), error?.response?.data?.message || error.message || 'No se pudo guardar la zona.');
     } finally {
       setLoading(false);
     }
@@ -139,8 +178,12 @@ export default function ZonesScreen() {
       const confirmed = window.confirm(`¿Eliminar la zona "${zone.name}"?`);
       if (confirmed) {
         (async () => {
-          await deleteZone(selectedStudent.id, zone.id);
-          await loadData();
+          try {
+            await safeZoneService.remove(zone.id);
+            setSafeZones(current => current.filter(item => item.id !== zone.id));
+          } catch (error) {
+            Alert.alert(t('error'), error?.response?.data?.message || error.message || 'No se pudo eliminar la zona.');
+          }
         })();
       }
       return;
@@ -155,81 +198,12 @@ export default function ZonesScreen() {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            await deleteZone(selectedStudent.id, zone.id);
-            await loadData();
-          },
-        },
-      ]
-    );
-  }
-
-  function openAddRoute() {
-    setEditingRoute(null);
-    setRouteForm(EMPTY_ROUTE);
-    setModalRouteVisible(true);
-  }
-
-  function openEditRoute(route) {
-    setEditingRoute(route);
-    setRouteForm(route);
-    setModalRouteVisible(true);
-  }
-
-  async function handleSaveRoute() {
-    if (!routeForm.name.trim() || !routeForm.start.trim() || !routeForm.end.trim()) {
-      Alert.alert(t('zonesRequiredFields'), t('zonesRequiredRouteMsg'));
-      return;
-    }
-    if (routeForm.name.trim().length < 2 || routeForm.name.trim().length > 100) {
-      Alert.alert(t('zonesRequiredFields'), 'El nombre de la ruta debe tener entre 2 y 100 caracteres.');
-      return;
-    }
-    if (routeForm.start.trim().length < 3 || routeForm.start.trim().length > 160) {
-      Alert.alert(t('zonesRequiredFields'), 'El punto inicial debe tener entre 3 y 160 caracteres.');
-      return;
-    }
-    if (routeForm.end.trim().length < 3 || routeForm.end.trim().length > 160) {
-      Alert.alert(t('zonesRequiredFields'), 'El punto final debe tener entre 3 y 160 caracteres.');
-      return;
-    }
-    const payload = normalizeRouteForm(routeForm);
-    setLoading(true);
-    try {
-      if (editingRoute) {
-        await updateRoute(selectedStudent.id, editingRoute.id, payload);
-      } else {
-        await addRoute(selectedStudent.id, payload);
-      }
-      await loadData();
-      setModalRouteVisible(false);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function confirmDeleteRoute(route) {
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`¿Eliminar la ruta "${route.name}"?`);
-      if (confirmed) {
-        (async () => {
-          await deleteRoute(selectedStudent.id, route.id);
-          await loadData();
-        })();
-      }
-      return;
-    }
-
-    Alert.alert(
-      'Eliminar Ruta',
-      `¿Eliminar la ruta "${route.name}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteRoute(selectedStudent.id, route.id);
-            await loadData();
+            try {
+              await safeZoneService.remove(zone.id);
+              setSafeZones(current => current.filter(item => item.id !== zone.id));
+            } catch (error) {
+              Alert.alert(t('error'), error?.response?.data?.message || error.message || 'No se pudo eliminar la zona.');
+            }
           },
         },
       ]
@@ -282,7 +256,9 @@ export default function ZonesScreen() {
     );
   }
 
-  const currentZones = selectedStudent.zones || [];
+  const currentZones = safeZones.filter(zone => (
+    String(zone.studentId) === String(selectedStudent.id)
+  ));
 
   return (
     <View style={[styles.container, themed.screen]}>
@@ -342,7 +318,9 @@ export default function ZonesScreen() {
                       </View>
                     <View style={styles.zoneBody}>
                       <Text style={[styles.zoneLabel, themed.textSecondary]}>{t('live') === 'Live' ? 'Address:' : 'Dirección:'}</Text>
-                      <Text style={[styles.zoneValue, themed.text]} numberOfLines={1}>{zone.address}</Text>
+                      <Text style={[styles.zoneValue, themed.text]} numberOfLines={1}>
+                        {zone.latitude}, {zone.longitude}
+                      </Text>
                       <View style={styles.zoneRow}>
                         <Text style={[styles.zoneLabel, themed.textSecondary]}>{t('live') === 'Live' ? 'Alert Radius:' : 'Radio Alerta:'}</Text>
                         <Text style={[styles.zoneValue, themed.text]}>{zone.radius}</Text>
@@ -367,21 +345,13 @@ export default function ZonesScreen() {
               <View style={styles.mapContainer}>
                  <SafeMap 
                     style={styles.map}
+                    safeZones={currentZones}
                     initialRegion={{
                       latitude: 4.5709,
                       longitude: -74.2973,
                       latitudeDelta: 0.05,
                       longitudeDelta: 0.05,
                     }}
-                    markers={currentZones.map((z, i) => {
-                      const markerColor = z.type === 'Escuela' ? colors.primary : (z.type === 'Casa' ? colors.accent : colors.error);
-                      return {
-                        lat: 4.5709 + (i * 0.005),
-                        lng: -74.2973 + (i * 0.005),
-                        color: markerColor,
-                        title: z.name
-                      };
-                    })}
                  />
               </View>
             </Surface>
@@ -392,9 +362,9 @@ export default function ZonesScreen() {
           <>
             <View style={styles.actionRow}>
               <Text style={[styles.countText, themed.textSecondary]}>{(selectedStudent.routes || []).length} {t('live') === 'Live' ? 'saved routes' : 'rutas guardadas'}</Text>
-              <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.accent }]} onPress={openAddRoute}>
-                <Text style={[styles.addBtnText, { color: colors.textOnAccent }]}>{t('live') === 'Live' ? '+ New Route' : '+ Nueva Ruta'}</Text>
-              </TouchableOpacity>
+              <Text style={[styles.countText, themed.textSecondary]}>
+                {t('live') === 'Live' ? 'Routes assigned from backend' : 'Rutas asignadas desde backend'}
+              </Text>
             </View>
 
             <View style={styles.zonesGrid}>
@@ -405,7 +375,7 @@ export default function ZonesScreen() {
                   <Surface key={route.id} style={[styles.zoneCard, themed.surface, { paddingBottom: 12, borderLeftWidth: 4, borderLeftColor: colors.accent }]} elevation={1}>
                     <View style={[styles.routeHeader, { borderColor: colors.border }]}>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.routeName, themed.text]}>{route.name}</Text>
+                        <Text style={[styles.routeName, themed.text]}>{route.routeName}</Text>
                         <Text style={[styles.routeAssign, themed.textSecondary]}>{t('live') === 'Live' ? 'Assigned to:' : 'Asignada a:'} {selectedStudent.nombre}</Text>
                       </View>
                       <View style={styles.routeStatus}>
@@ -416,20 +386,19 @@ export default function ZonesScreen() {
                     
                     <View style={styles.routeTimeline}>
                       <View style={styles.timelineDotGreen} />
-                      <Text style={[styles.timelineText, themed.text]}>{route.start}</Text>
+                      <Text style={[styles.timelineText, themed.text]}>
+                        {route.originLatitude}, {route.originLongitude}
+                      </Text>
                       <View style={[styles.timelineLine, { backgroundColor: colors.border }]} />
                       <View style={styles.timelineDotRed} />
-                      <Text style={[styles.timelineText, themed.text]}>{route.end}</Text>
+                      <Text style={[styles.timelineText, themed.text]}>
+                        {route.destinationLatitude}, {route.destinationLongitude}
+                      </Text>
                     </View>
 
-                    <View style={styles.zoneFooter}>
-                      <TouchableOpacity style={[styles.editBtn, themed.surfaceSecondary]} onPress={() => openEditRoute(route)}>
-                        <Text style={[styles.editBtnText, { color: colors.primary }]}>{t('live') === 'Live' ? 'Edit' : 'Editar'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.deleteBtn, { backgroundColor: colors.errorLight }]} onPress={() => confirmDeleteRoute(route)}>
-                        <Text style={[styles.deleteBtnText, { color: colors.error }]}>{t('live') === 'Live' ? 'Delete' : 'Eliminar'}</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <Text style={[styles.routeAssign, themed.textSecondary]}>
+                      {route.stops?.length || 0} {t('live') === 'Live' ? 'stops' : 'paradas'} · Datos reales del backend
+                    </Text>
                   </Surface>
                 ))
               )}
@@ -451,7 +420,18 @@ export default function ZonesScreen() {
               
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
                 <ZField label="Nombre de la zona" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Ej: Casa, Escuela..." color={form.color} />
-                <ZField label="Direccion" value={form.address} onChange={v => setForm(f => ({ ...f, address: v }))} placeholder="Ej: Calle 123..." color={form.color} />
+                <Text style={[styles.fieldLabel, themed.textSecondary]}>Ubicación real</Text>
+                <Text style={[styles.coordinateHint, themed.textSecondary]}>
+                  Ingresa las coordenadas reales de la zona seleccionada en el mapa.
+                </Text>
+                <View style={styles.formRow}>
+                  <View style={styles.formHalf}>
+                    <ZField label="Latitud" value={String(form.latitude || '')} onChange={v => setForm(f => ({ ...f, latitude: v }))} placeholder="4.000000" color={form.color} keyboardType="decimal-pad" />
+                  </View>
+                  <View style={styles.formHalf}>
+                    <ZField label="Longitud" value={String(form.longitude || '')} onChange={v => setForm(f => ({ ...f, longitude: v }))} placeholder="-74.000000" color={form.color} keyboardType="decimal-pad" />
+                  </View>
+                </View>
                 
                 <View style={styles.formRow}>
                   <View style={styles.formHalf}>
@@ -491,6 +471,32 @@ export default function ZonesScreen() {
                         })}
                       </View>
                     </View>
+                    <SafeMap
+                      style={styles.modalMap}
+                      studentLocation={{
+                        latitude: Number(form.latitude),
+                        longitude: Number(form.longitude),
+                      }}
+                      initialRegion={{
+                        latitude: Number(form.latitude) || 4.5709,
+                        longitude: Number(form.longitude) || -74.2973,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }}
+                      onLocationSelect={(coordinate) => setForm((current) => ({
+                        ...current,
+                        latitude: coordinate.latitude.toFixed(6),
+                        longitude: coordinate.longitude.toFixed(6),
+                      }))}
+                    />
+                    <ZField
+                      label="Alerta por inactividad (segundos)"
+                      value={String(form.inactivityAlertSeconds || '')}
+                      onChange={v => setForm(f => ({ ...f, inactivityAlertSeconds: v.replace(/\D/g, '').slice(0, 5) }))}
+                      placeholder="300"
+                      color={form.color}
+                      keyboardType="number-pad"
+                    />
                   </View>
                 </View>
               </ScrollView>
@@ -524,80 +530,6 @@ export default function ZonesScreen() {
         </View>
       </Modal>
 
-      {/* Modal Agregar/Editar Ruta */}
-      <Modal visible={modalRouteVisible} transparent animationType="slide">
-        <View style={[styles.modalOverlay, themed.overlay]}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKAV}>
-            <Surface style={[styles.modalSheet, themed.surface]} elevation={5}>
-              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.modalTitle, themed.text]}>{editingRoute ? 'Editar Ruta' : 'Nueva Ruta'}</Text>
-                <IconButton icon="close" size={20} iconColor={colors.textSecondary} onPress={() => setModalRouteVisible(false)} />
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
-                <ZField 
-                  label="Nombre de la ruta *" 
-                  value={routeForm.name} 
-                  onChange={v => setRouteForm({ ...routeForm, name: v })} 
-                  placeholder="Ej. Casa - Colegio" 
-                />
-                <View style={styles.formRow}>
-                  <View style={styles.formHalf}>
-                    <ZField 
-                      label="Direccion inicial" 
-                      value={routeForm.start} 
-                      onChange={v => setRouteForm({ ...routeForm, start: v })} 
-                      placeholder="Lugar de inicio" 
-                    />
-                  </View>
-                  <View style={styles.formHalf}>
-                    <ZField 
-                      label="Direccion final" 
-                      value={routeForm.end} 
-                      onChange={v => setRouteForm({ ...routeForm, end: v })} 
-                      placeholder="Lugar de destino" 
-                    />
-                  </View>
-                </View>
-                
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.fieldLabel, themed.textSecondary]}>Estudiante</Text>
-                  <TextInput 
-                    style={[styles.input, themed.surfaceSecondary, { color: colors.textSecondary }]} 
-                    value={selectedStudent?.nombre} 
-                    editable={false} 
-                  />
-                </View>
-              </ScrollView>
-              <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
-                <TouchableOpacity style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={() => setModalRouteVisible(false)}>
-                  <Text style={[styles.cancelBtnText, themed.textSecondary]}>Cancelar</Text>
-                </TouchableOpacity>
-                {editingRoute && (
-                  <TouchableOpacity 
-                    style={[styles.deleteActionBtn, { backgroundColor: colors.errorLight }]}
-                    onPress={() => {
-                      setModalRouteVisible(false);
-                      confirmDeleteRoute(editingRoute);
-                    }}
-                  >
-                    <Text style={[styles.deleteBtnText, { color: colors.error }]}>Eliminar</Text>
-                  </TouchableOpacity>
-                )}
-                <Button 
-                  mode="contained" 
-                  onPress={handleSaveRoute}
-                  loading={loading}
-                  style={[styles.saveBtn, { backgroundColor: colors.accent }]}
-                  contentStyle={styles.buttonContent}
-                >
-                  {editingRoute ? 'Guardar' : 'Crear'}
-                </Button>
-              </View>
-            </Surface>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -684,6 +616,8 @@ const styles = StyleSheet.create({
   mapCardTitle: { padding: 14, fontSize: 16, fontWeight: 'bold', color: COLORS.NEGRO, borderBottomWidth: 1, borderBottomColor: COLORS.GRIS_BORDE },
   mapContainer: { flex: 1 },
   map: { flex: 1 },
+  modalMap: { height: 180, marginVertical: 10, borderRadius: 8 },
+  coordinateHint: { fontSize: 12, marginBottom: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: isWeb ? 24 : 10, paddingVertical: 18 },
   modalKAV: { width: '100%', alignItems: 'center', justifyContent: 'center' },
   modalContent: { backgroundColor: COLORS.BLANCO, borderRadius: 12, padding: 20, maxHeight: '90%' },

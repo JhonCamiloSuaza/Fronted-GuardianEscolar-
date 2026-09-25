@@ -217,15 +217,15 @@ api.interceptors.request.use(async (config) => {
 
 ---
 
-#### `react-native-maps` — v1.27.2
-**¿Qué es?** Componente de mapas nativos para React Native. En Android usa Google Maps, en iOS usa Apple Maps o Google Maps (configurable).
+#### `Leaflet en react-native-webview` — v1.27.2
+**¿Qué es?** Componente de mapas nativos para React Native. En Android usa Leaflet/OpenStreetMap, en iOS usa Apple Maps o Leaflet/OpenStreetMap (configurable).
 
-**¿Por qué no Leaflet o Mapbox?** `react-native-maps` provee acceso a los mapas **nativos del sistema operativo**, lo que resulta en mejor rendimiento, gestos nativos y soporte offline automático.
+**¿Por qué no Leaflet o Mapbox?** `Leaflet en react-native-webview` provee acceso a los mapas **nativos del sistema operativo**, lo que resulta en mejor rendimiento, gestos nativos y soporte offline automático.
 
 **Limitación importante:** No funciona en navegadores web. Por eso existe `SafeMap.js` — un envoltorio que detecta la plataforma y muestra una alternativa en web.
 
 ```javascript
-import MapView, { Marker, Circle, Polyline } from 'react-native-maps';
+import MapView, { Marker, Circle, Polyline } from 'Leaflet en react-native-webview';
 
 <MapView
   style={{ flex: 1 }}
@@ -336,7 +336,7 @@ StyleSheet         →    Objeto CSS inline
 flexbox            →    flexbox CSS nativo
 ```
 
-**Limitación:** Algunos componentes nativos (especialmente `react-native-maps`) no tienen equivalente web y requieren componentes alternativos como `SafeMap.js`.
+**Limitación:** Algunos componentes nativos (especialmente `Leaflet en react-native-webview`) no tienen equivalente web y requieren componentes alternativos como `SafeMap.js`.
 
 ---
 
@@ -385,7 +385,7 @@ const api = axios.create({
 Autenticación        → authService (AsyncStorage) + expo-secure-store
 Navegación           → expo-router → @react-navigation/*
 UI/Estilos           → react-native + react-native-paper + MaterialCommunityIcons
-Mapas                → react-native-maps + expo-location + SafeMap.js (web fallback)
+Mapas                → Leaflet en react-native-webview + expo-location + SafeMap.js (web fallback)
 Tiempo Real GPS      → @stomp/stompjs + sockjs-client
 Almacenamiento local → @react-native-async-storage/async-storage
 API REST             → axios + react-native-dotenv + .env

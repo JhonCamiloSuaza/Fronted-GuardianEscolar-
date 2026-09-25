@@ -30,7 +30,6 @@ Crear un `.env` local solo si vas a ejecutar el frontend fuera de `docker-infra`
 EXPO_PUBLIC_API_URL=http://localhost:8080
 EXPO_PUBLIC_WS_URL=ws://localhost:8080/ws
 EXPO_PUBLIC_STUDENT_LINK_BASE_URL=http://localhost:8081
-EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=<TU_API_KEY>
 ```
 
 El archivo real `.env` no debe subirse. Para compartir estructura usa `.env.example`.
@@ -75,7 +74,6 @@ Servicios esperados:
 | `EXPO_PUBLIC_API_URL`               | URL REST del backend                                      |
 | `EXPO_PUBLIC_WS_URL`                | URL WebSocket del backend                                 |
 | `EXPO_PUBLIC_STUDENT_LINK_BASE_URL` | URL publica del frontend para enlaces enviados por correo |
-| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`   | API Key de Google Maps                                    |
 
 Cuando se use tunnel externo, actualizar estas URLs con el dominio publico correspondiente. Si el tunnel es privado, otros equipos pueden recibir error 403; debe configurarse como publico o compartir acceso desde la herramienta del tunnel.
 

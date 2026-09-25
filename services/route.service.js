@@ -6,6 +6,11 @@ export const routeService = {
     return response.data;
   },
 
+  geometry: async (id) => {
+    const response = await api.get(`/routes/${id}/geometry`);
+    return response.data;
+  },
+
   create: async (data) => {
     const response = await api.post('/routes', data);
     return response.data;

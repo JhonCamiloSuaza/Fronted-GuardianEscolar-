@@ -41,8 +41,8 @@ components/
 **¿Qué hace?**
 Es el componente más importante de esta carpeta. Actúa como un **envoltorio inteligente** para los mapas de la aplicación.
 
-**El problema que resuelve:** `react-native-maps` (la librería de mapas) NO funciona en navegadores web, solo en Android/iOS. Este componente detecta automáticamente en qué plataforma está corriendo y:
-- **En Móvil (Android/iOS):** Muestra el mapa real de Google Maps con todas sus funciones.
+**El problema que resuelve:** `Leaflet en react-native-webview` (la librería de mapas) NO funciona en navegadores web, solo en Android/iOS. Este componente detecta automáticamente en qué plataforma está corriendo y:
+- **En Móvil (Android/iOS):** Muestra el mapa real de Leaflet/OpenStreetMap con todas sus funciones.
 - **En Web (Navegador):** Muestra una versión simulada del mapa con un diseño similar para que la interfaz no se rompa.
 
 **Usado en:** `tracking.js`, `history.js`, `zones.js`
@@ -128,13 +128,13 @@ Componentes visuales específicos para la pantalla de mapa y seguimiento.
 
 ### `MapComponent.js`
 **¿Qué es?**
-El componente principal del mapa de seguimiento. Configura `react-native-maps` con las opciones necesarias: región inicial, tipo de mapa, estilo y control de gestos (zoom, desplazamiento).
+El componente principal del mapa de seguimiento. Configura `Leaflet en react-native-webview` con las opciones necesarias: región inicial, tipo de mapa, estilo y control de gestos (zoom, desplazamiento).
 
 ---
 
 ### `StudentMarker.js`
 **¿Qué es?**
-El marcador (pin) personalizado que aparece en el mapa sobre la ubicación del estudiante. En lugar del pin genérico rojo de Google Maps, muestra un ícono con la inicial del nombre del estudiante y el color de su estado (verde = seguro, rojo = alerta, azul = en camino).
+El marcador (pin) personalizado que aparece en el mapa sobre la ubicación del estudiante. En lugar del pin genérico rojo de Leaflet/OpenStreetMap, muestra un ícono con la inicial del nombre del estudiante y el color de su estado (verde = seguro, rojo = alerta, azul = en camino).
 
 ---
 

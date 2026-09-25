@@ -273,7 +273,7 @@ app/(tabs)/student.js
 
 app/(tabs)/history.js
   ├── utils/studentStorage.js
-  ├── components/SafeMap.js ── react-native-maps (móvil)
+  ├── components/SafeMap.js ── Leaflet en react-native-webview (móvil)
   ├── contexts/LanguageContext.js
   └── constants/colors.js
 

@@ -154,7 +154,7 @@ EXPO_PUBLIC_WS_URL=ws://[IP-del-servidor]:8080/ws
 | `react-native-paper` | ^5.15 | Componentes UI con Material Design |
 | `@react-native-async-storage/async-storage` | 2.2.0 | Almacenamiento local persistente |
 | `axios` | ^1.14 | Peticiones HTTP al backend |
-| `react-native-maps` | 1.27.2 | Mapas GPS nativos |
+| `Leaflet en react-native-webview` | 1.27.2 | Mapas GPS nativos |
 | `@stomp/stompjs` | ^7.3 | WebSockets para GPS en tiempo real |
 | `expo-location` | 55.x | Acceso al GPS del dispositivo |
 | `expo-image-picker` | 55.x | Cámara y galería para fotos de hijos |

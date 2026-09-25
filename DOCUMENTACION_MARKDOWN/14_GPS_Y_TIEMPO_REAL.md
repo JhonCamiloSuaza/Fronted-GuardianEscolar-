@@ -17,9 +17,9 @@ El acudiente necesita saber **en tiempo real** dónde está su hijo durante el t
 
 ## El Desafío: Web vs. Móvil
 
-`react-native-maps` — la librería de mapas elegida — usa el motor **nativo** de mapas del SO:
-- **Android:** Google Maps SDK nativo.
-- **iOS:** MapKit / Google Maps SDK.
+`Leaflet en react-native-webview` — la librería de mapas elegida — usa el motor **nativo** de mapas del SO:
+- **Android:** Leaflet/OpenStreetMap SDK nativo.
+- **iOS:** MapKit / Leaflet/OpenStreetMap SDK.
 - **Web:** ❌ No tiene implementación. Simplemente no existe.
 
 Intentar renderizar `<MapView>` en un navegador lanza un error fatal. La solución fue crear un **componente de abstracción** que decide qué renderizar según la plataforma.
@@ -36,7 +36,7 @@ import { Platform } from 'react-native';
 // En web, esta importación nunca se ejecuta (y no falla)
 let MapView, Marker, Circle;
 if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
+  const Maps = require('Leaflet en react-native-webview');
   MapView = Maps.default;
   Marker  = Maps.Marker;
   Circle  = Maps.Circle;
@@ -89,11 +89,11 @@ export default function SafeMap({ students, showRoute, style }) {
 
 ```javascript
 // ❌ Esto fallaría en web — la importación es estática y siempre se evalúa
-import MapView from 'react-native-maps';
+import MapView from 'Leaflet en react-native-webview';
 
 // ✅ require() es dinámico — solo se ejecuta cuando Platform.OS !== 'web'
 if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
+  const Maps = require('Leaflet en react-native-webview');
 }
 ```
 
@@ -105,11 +105,11 @@ Las importaciones `import` de ES Modules son **estáticas** y se resuelven en ti
 
 ### `StudentMarker.js` — El Pin Personalizado
 
-En lugar del pin rojo genérico de Google Maps, se muestra un marcador personalizado con las iniciales del estudiante y el color de su estado:
+En lugar del pin rojo genérico de Leaflet/OpenStreetMap, se muestra un marcador personalizado con las iniciales del estudiante y el color de su estado:
 
 ```javascript
 // components/map/StudentMarker.js
-import { Marker } from 'react-native-maps';
+import { Marker } from 'Leaflet en react-native-webview';
 
 function StudentMarker({ student }) {
   return (
@@ -136,7 +136,7 @@ function StudentMarker({ student }) {
 
 ```javascript
 // components/map/SafeZoneCircle.js
-import { Circle } from 'react-native-maps';
+import { Circle } from 'Leaflet en react-native-webview';
 
 function SafeZoneCircle({ zone }) {
   return (
@@ -155,7 +155,7 @@ function SafeZoneCircle({ zone }) {
 
 ```javascript
 // components/map/RoutePolyline.js
-import { Polyline } from 'react-native-maps';
+import { Polyline } from 'Leaflet en react-native-webview';
 
 function RoutePolyline({ coordinates }) {
   return (

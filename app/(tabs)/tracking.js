@@ -3,12 +3,16 @@ import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Scro
 import { Avatar, Text, Surface, IconButton, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import * as Location from 'expo-location';
 import { COLORS } from '../../constants/colors';
 import SafeMap from '../../components/SafeMap';
 import { getStudents, getInitials } from '../../utils/studentStorage';
+import { trackingService } from '../../services/tracking.service';
+import { routeService } from '../../services/route.service';
+import { safeZoneService } from '../../services/safe-zone.service';
+import { createTrackingSocket } from '../../services/socket';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { decodePolyline } from '../../utils/polyline';
 
 const { width } = Dimensions.get('window');
 const isWeb = width > 768;
@@ -20,13 +24,44 @@ const INITIAL_REGION = {
   longitudeDelta: 0.005,
 };
 
+function normalizeCoordinate(coordinate) {
+  if (!coordinate) return null;
+
+  const latitude = Number(coordinate.latitude);
+  const longitude = Number(coordinate.longitude);
+
+  if (
+    !Number.isFinite(latitude)
+    || !Number.isFinite(longitude)
+    || latitude < -90
+    || latitude > 90
+    || longitude < -180
+    || longitude > 180
+  ) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+    recordedAt: coordinate.recordedAt || new Date().toISOString(),
+    id: coordinate.id,
+  };
+}
+
 export default function TrackingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [location, setLocation] = useState(null);
+  const [studentLocation, setStudentLocation] = useState(null);
+  const [trail, setTrail] = useState([]);
+  const [safeZones, setSafeZones] = useState([]);
+  const [assignedRoute, setAssignedRoute] = useState({ path: [], points: [] });
+  const [routeError, setRouteError] = useState(null);
+  const [activeTrip, setActiveTrip] = useState(null);
+  const [trackingError, setTrackingError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -39,22 +74,114 @@ export default function TrackingScreen() {
     textSecondary: { color: colors.textSecondary },
   };
 
-  const refreshLocation = useCallback(async () => {
+  const refreshTracking = useCallback(async () => {
     setIsLoading(true);
+    setTrackingError(null);
+    setActiveTrip(null);
+    setStudentLocation(null);
+    setTrail([]);
+    setSafeZones([]);
+    setAssignedRoute({ path: [], points: [] });
+    setRouteError(null);
+
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocation(null);
+      if (!selectedStudent?.id) {
         return;
       }
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setLocation(current.coords);
-    } catch {
-      setLocation(null);
+
+      const [trips, allSafeZones] = await Promise.all([
+        trackingService.listTrips(),
+        safeZoneService.list().catch((error) => {
+          console.warn('No se pudieron cargar las zonas seguras:', error?.message || error);
+          return [];
+        }),
+      ]);
+      setSafeZones(allSafeZones.filter((zone) => (
+        String(zone.studentId) === String(selectedStudent.id)
+      )));
+      const trip = trips
+        .filter((item) => (
+          String(item.studentId) === String(selectedStudent.id)
+          && item.status === 'IN_PROGRESS'
+        ))
+        .sort((a, b) => new Date(b.tripStartedAt) - new Date(a.tripStartedAt))[0];
+
+      if (!trip) return;
+
+      const coordinates = await trackingService.listCoordinates(trip.id);
+      const points = coordinates
+        .map(normalizeCoordinate)
+        .filter(Boolean)
+        .sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
+
+      setActiveTrip(trip);
+      setTrail(points);
+      setStudentLocation(points[points.length - 1] || null);
+
+      try {
+        const routes = await routeService.list();
+        const route = routes.find((item) => String(item.id) === String(trip.routeId));
+        if (!route) {
+          setRouteError('No hay una ruta asignada para este viaje.');
+          return;
+        }
+
+        const routePoints = [
+          {
+            latitude: route.originLatitude,
+            longitude: route.originLongitude,
+            type: 'origin',
+            title: 'Origen',
+          },
+          ...(route.stops || [])
+            .slice()
+            .sort((a, b) => a.stopOrder - b.stopOrder)
+            .map((stop) => ({
+              latitude: stop.latitude,
+              longitude: stop.longitude,
+              type: 'stop',
+              title: stop.stopName,
+              id: stop.id,
+            })),
+          {
+            latitude: route.destinationLatitude,
+            longitude: route.destinationLongitude,
+            type: 'destination',
+            title: 'Destino',
+          },
+        ]
+          .map((point) => {
+            const latitude = Number(point.latitude);
+            const longitude = Number(point.longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+            return { ...point, latitude, longitude };
+          })
+          .filter(Boolean);
+
+        if (routePoints.length < 2) {
+          setRouteError('La ruta asignada no tiene suficientes coordenadas.');
+        } else {
+          let geometry = null;
+          try {
+            geometry = await routeService.geometry(route.id);
+          } catch (error) {
+            console.warn('No se pudo cargar la geometría vial; se usará el fallback:', error?.message || error);
+          }
+          const decodedPath = decodePolyline(geometry?.encodedPolyline);
+          setAssignedRoute({
+            path: decodedPath.length > 1 ? decodedPath : routePoints,
+            points: routePoints,
+          });
+        }
+      } catch (error) {
+        setRouteError(error?.message || 'No se pudo cargar la ruta asignada.');
+      }
+    } catch (error) {
+      setTrackingError(error?.message || 'No se pudo cargar el seguimiento.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedStudent]);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,8 +211,69 @@ export default function TrackingScreen() {
   };
 
   useEffect(() => {
-    refreshLocation();
-  }, [refreshLocation]);
+    refreshTracking();
+  }, [refreshTracking]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeTrip?.id) return undefined;
+
+      let isActive = true;
+      let socket;
+
+      createTrackingSocket({
+        tripId: activeTrip.id,
+        onCoordinate: (payload) => {
+          if (!isActive) return;
+
+          const coordinate = normalizeCoordinate(payload);
+          if (!coordinate) return;
+
+          setTrail((currentTrail) => {
+            const isDuplicate = currentTrail.some((point) => (
+              (coordinate.id && point.id === coordinate.id)
+              || (
+                point.latitude === coordinate.latitude
+                && point.longitude === coordinate.longitude
+                && point.recordedAt === coordinate.recordedAt
+              )
+            ));
+
+            if (isDuplicate) return currentTrail;
+
+            return [...currentTrail, coordinate]
+              .sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
+          });
+          setStudentLocation((currentLocation) => {
+            if (!currentLocation) return coordinate;
+            return new Date(coordinate.recordedAt) >= new Date(currentLocation.recordedAt)
+              ? coordinate
+              : currentLocation;
+          });
+        },
+        onError: (error) => {
+          if (isActive) {
+            console.warn('Seguimiento en tiempo real no disponible:', error?.message || error);
+          }
+        },
+      }).then((createdSocket) => {
+        if (isActive) {
+          socket = createdSocket;
+        } else {
+          createdSocket.deactivate();
+        }
+      }).catch((error) => {
+        if (isActive) {
+          console.warn('No se pudo conectar el seguimiento en tiempo real:', error?.message || error);
+        }
+      });
+
+      return () => {
+        isActive = false;
+        socket?.deactivate();
+      };
+    }, [activeTrip?.id])
+  );
 
   return (
     <View style={[styles.container, themed.screen]}>
@@ -110,7 +298,7 @@ export default function TrackingScreen() {
             size={20} 
             style={[styles.refreshBtn, themed.surfaceSecondary]} 
             iconColor={colors.textSecondary} 
-            onPress={refreshLocation}
+            onPress={refreshTracking}
           />
         </Surface>
 
@@ -149,7 +337,10 @@ export default function TrackingScreen() {
             </View>
           ) : (
             <SafeMap 
-              currentLocation={location} 
+              studentLocation={studentLocation}
+              trail={trail}
+              safeZones={safeZones}
+              assignedRoute={assignedRoute}
               initialRegion={INITIAL_REGION} 
               style={styles.map}
             />
@@ -160,7 +351,7 @@ export default function TrackingScreen() {
             containerColor={colors.surface}
             iconColor={colors.primary}
             style={styles.mapFab} 
-            onPress={refreshLocation}
+            onPress={refreshTracking}
           />
           
           {/* Leyenda del Mapa */}
@@ -190,12 +381,18 @@ export default function TrackingScreen() {
             <View>
               <Text style={[styles.cardTitle, themed.text]}>{t('trackLastUpdate')}</Text>
               <Text style={[styles.cardSubtitle, themed.textSecondary]}>
-                {location ? 'Ubicación local actualizada' : 'Sin ubicación disponible'}
+                {trackingError || (studentLocation
+                  ? `Última coordenada: ${studentLocation.recordedAt || 'disponible'}`
+                  : activeTrip
+                    ? 'No hay coordenadas para este viaje'
+                    : selectedStudent
+                      ? 'No hay viaje activo para este estudiante'
+                      : 'Selecciona un estudiante')}
               </Text>
             </View>
             <View style={[styles.activeBadge, { backgroundColor: colors.accentLight }]}>
-              <Text style={[styles.activeBadgeText, { color: location ? colors.success : colors.warning }]}>
-                {location ? t('trackActive') : 'Sin datos'}
+              <Text style={[styles.activeBadgeText, { color: studentLocation ? colors.success : colors.warning }]}>
+                {studentLocation ? t('trackActive') : 'Sin datos'}
               </Text>
             </View>
           </View>
@@ -208,7 +405,11 @@ export default function TrackingScreen() {
           <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="target" size={16} color={COLORS.ALERTA} style={styles.statusIcon} />
             <Text style={[styles.statusText, themed.text]}>
-              {selectedStudent ? 'Esperando trayecto activo' : t('trackSelectStudent')}
+              {trackingError || routeError || (activeTrip
+                ? 'Viaje activo'
+                : selectedStudent
+                  ? 'Sin viaje activo'
+                  : t('trackSelectStudent'))}
             </Text>
           </View>
           
@@ -220,9 +421,9 @@ export default function TrackingScreen() {
           <View style={[styles.statusRowWrapper, themed.surfaceSecondary]}>
             <MaterialCommunityIcons name="map-marker" size={16} color={COLORS.PRIMARIO} style={styles.statusIcon} />
             <Text style={[styles.statusText, themed.text]}>
-              {location
-                ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
-                : 'Sin ubicación registrada'}
+              {studentLocation
+                ? `${studentLocation.latitude.toFixed(6)}, ${studentLocation.longitude.toFixed(6)}`
+                : 'No hay ubicación disponible para este estudiante'}
             </Text>
           </View>
         </Surface>
